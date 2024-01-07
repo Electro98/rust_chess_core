@@ -1,0 +1,23 @@
+# Silly Chess Engine
+
+That's just chess engine for my "Dark Chess" game as my student diploma project.
+
+## TODO:
+ - [ ] Create basic declarations for all game elements
+   - [X] Chess board
+   - [X] Chess piece
+   - [X] Move
+   - [ ] History of moves
+ - [ ] Write logic for:
+   - [X] Making a move
+   - [X] Undo a move
+   - [ ] List all possible moves
+   - [X] Allowing Checks and Mate
+   - [ ] Castling right check
+ - [ ] Make basic interface?
+   - [ ] Display board
+   - [ ] Make moves colorful
+   - [ ] Display checks and mates
+ - [ ] Create kotling bindings
+   - [ ] Compile it
+   - [ ] Make it works
