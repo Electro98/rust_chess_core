@@ -1,14 +1,16 @@
 #![allow(dead_code)]
 
+use std::fmt::Debug;
+
 use log::{debug, trace};
 
-#[derive(Clone, Copy)]
-enum CastlingSide {
+#[derive(Clone, Copy, PartialEq)]
+pub enum CastlingSide {
     KingSide = 0x07,
     QueenSide = 0x00,
 }
 
-enum Move {
+pub enum Move {
     /** skip of move, probably will be deleted */
     NullMove,
     /** who is moving, where it's moving */
@@ -28,12 +30,13 @@ enum Move {
 }
 
 /** Variation of 0x88 board */
-struct Board {
+pub struct Board {
     arr: [u8; 128],
 }
 
 impl Board {
-    fn new() -> Board {
+    #[rustfmt::skip]
+    pub fn new() -> Board {
         Board {
             arr: [
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
@@ -53,8 +56,12 @@ impl Board {
         todo!()
     }
 
+    pub fn inside(&self) -> &[u8; 128] {
+        &self.arr
+    }
+
     /** Execute ***valid*** move. */
-    fn execute(&mut self, _move: Move) {
+    pub fn execute(&mut self, _move: Move) {
         use Move::*;
         match _move {
             NullMove => trace!("Detected NullMove! Is it intentional?"),
@@ -119,7 +126,10 @@ impl Board {
                     "King have already moved!"
                 );
                 assert!(
-                    king.code & PieceFlag::CanCastle as u8 != 0,
+                    ((castling_side == CastlingSide::KingSide
+                        && king.code & PieceFlag::CanCastleKingSide as u8 != 0)
+                        || (castling_side == CastlingSide::QueenSide
+                            && king.code & PieceFlag::CanCastleQueenSide as u8 != 0)),
                     "King can't castle!"
                 );
                 // TODO: check if king crosses square under attack (castle rights bits)
@@ -186,7 +196,7 @@ impl Board {
     }
 
     /** Undo valid move. */
-    fn undo(&mut self, _move: Move) {
+    pub fn undo(&mut self, _move: Move) {
         use Move::*;
         match _move {
             NullMove => trace!("Undo NullMove! Is it intentional?"),
@@ -237,12 +247,12 @@ impl Board {
         }
     }
 
-    fn who_can_attack(&self, piece: Piece) -> Option<Vec<Piece>> {
+    pub fn who_can_attack(&self, piece: Piece) -> Option<Vec<Piece>> {
         let color = piece.color();
         let mut attackers = Vec::with_capacity(8);
         for file in 0..8u8 {
             for rank in 0..8u8 {
-                let pos = rank << 4 & file;
+                let pos = rank << 4 | file;
                 let cell = Piece::from_code(self.arr[pos as usize], pos);
                 if cell.code != 0x00 && cell.color() != color && cell.can_attack(piece.position) {
                     attackers.push(cell);
@@ -259,7 +269,7 @@ impl Board {
     fn is_attacked(&self, position: u8, color: Color) -> bool {
         for file in 0..8u8 {
             for rank in 0..8u8 {
-                let pos = rank << 4 & file;
+                let pos = rank << 4 | file;
                 let piece = Piece::from_code(self.arr[pos as usize], pos);
                 if piece.code != 0x00 && piece.color() != color && piece.can_attack(position) {
                     return true;
@@ -269,7 +279,7 @@ impl Board {
         false
     }
 
-    fn get_possible_moves(&self, color: Color, last_move: Move) -> Vec<Move> {
+    pub fn get_possible_moves(&self, color: Color, last_move: Move) -> Vec<Move> {
         // Check for pawn double push
         let enpassant_pawn = match last_move {
             Move::PawnDoublePush(pawn, pos) => Some(Piece::from_code(pawn.code, pos)),
@@ -278,7 +288,7 @@ impl Board {
         let mut possible_moves = Vec::with_capacity(256);
         for file in 0..8u8 {
             for rank in 0..8u8 {
-                let pos = rank << 4 & file;
+                let pos = rank << 4 | file;
                 let piece = Piece::from_code(self.arr[pos as usize], pos);
                 if piece.code == 0x00 || piece.color() != color {
                     continue;
@@ -342,7 +352,7 @@ impl Board {
                     PieceType::Knight => {
                         for offset in KNIGHT_MOVES {
                             let pos = pos + offset;
-                            if pos & 0x00 != 0x00 {
+                            if pos & 0x00 != 0x00 || pos & 0x88 != 0 {
                                 continue;
                             }
                             let cell = self.arr[pos as usize];
@@ -368,9 +378,7 @@ impl Board {
                                     .push(Move::Capture(piece.clone(), Piece::from_code(cell, pos)))
                             }
                         }
-                        if piece.code & PieceFlag::Moved as u8 != 0
-                            || piece.code & PieceFlag::CanCastle as u8 == 0
-                        {
+                        if piece.code & PieceFlag::Moved as u8 != 0 {
                             break;
                         }
                         for castling_side in [CastlingSide::KingSide, CastlingSide::QueenSide] {
@@ -379,6 +387,10 @@ impl Board {
                             if cell & PieceFlag::Moved as u8 == 0
                                 && Color::from_byte(cell) == color
                                 && PieceType::from_byte(cell) == PieceType::Rook
+                                && ((castling_side == CastlingSide::KingSide
+                                    && piece.code & PieceFlag::CanCastleKingSide as u8 != 0)
+                                    || (castling_side == CastlingSide::QueenSide
+                                        && piece.code & PieceFlag::CanCastleQueenSide as u8 != 0))
                             {
                                 possible_moves.push(Move::Castling(
                                     piece.clone(),
@@ -422,9 +434,59 @@ impl Board {
         }
         possible_moves
     }
+
+    pub fn is_checked(&self, color: Color) -> (bool, Piece) {
+        for file in 0..8u8 {
+            for rank in 0..8u8 {
+                let pos = rank << 4 | file;
+                let piece = Piece::from_code(self.arr[pos as usize], pos);
+                if piece.type_() != PieceType::King || piece.color() != color {
+                    continue;
+                }
+                return (self.is_attacked(piece.position, color), piece);
+            }
+        }
+        panic!("Where is the king?????????????????????????????")
+    }
+
+    pub fn castling_right_check(&self, king: Piece) -> (bool, bool) {
+        if king.code & PieceFlag::Moved as u8 != 0 {
+            return (false, false);
+        }
+        let rank = king.position & 0xf0;
+        (
+            {
+                // KingSide
+                let mut flag = true;
+                for file in [0x06, 0x05] {
+                    let pos = rank | file;
+                    let code = self.arr[pos as usize];
+                    if code != 0 || self.is_attacked(pos, king.color()) {
+                        flag = false;
+                        break;
+                    }
+                }
+                flag
+            },
+            {
+                // QueenSide
+                let mut flag = true;
+                for file in [0x03, 0x02] {
+                    let pos = rank | file;
+                    let code = self.arr[pos as usize];
+                    if code != 0 || self.is_attacked(pos, king.color()) {
+                        flag = false;
+                        break;
+                    }
+                }
+                flag
+            },
+        )
+    }
 }
 
 impl Default for Board {
+    #[rustfmt::skip]
     fn default() -> Self {
         Board {
             arr: [
@@ -455,8 +517,8 @@ const KNIGHT_MOVES: &[u8] = &[0x12, 0x21, 0x2f, 0x1e, 0xfe, 0xef, 0xe1, 0xf2];
  * - 1 -- Black
  * - 0 -- White
  * Bit 6 -- Not used
- * Bit 5 -- Not used
- * Bit 4 -- Castle flag for Kings only
+ * Bit 5 -- Castle flag for Kings only - QueenSide
+ * Bit 4 -- Castle flag for Kings only - KingSide
  * Bit 3 -- Piece has moved flag
  * Bits 2-0 Piece type
  * - 1 -- Pawn
@@ -467,8 +529,8 @@ const KNIGHT_MOVES: &[u8] = &[0x12, 0x21, 0x2f, 0x1e, 0xfe, 0xef, 0xe1, 0xf2];
  * - 6 -- King
  * - 7 -- Not used
  * - 0 -- Empty Square */
-#[derive(Clone)]
-struct Piece {
+#[derive(Clone, PartialEq)]
+pub struct Piece {
     code: u8,
     position: u8,
 }
@@ -476,31 +538,33 @@ struct Piece {
 enum PieceFlag {
     /** Bit 3 -- Piece has moved flag */
     Moved = 0x08,
-    /** Bit 4 -- Castle flag for Kings only */
-    CanCastle = 0x10,
+    /** Bit 4 -- Castle flag for Kings only - KingSide */
+    CanCastleKingSide = 0x10,
+    /** Bit 5 -- Castle flag for Kings only - QueenSide */
+    CanCastleQueenSide = 0x20,
 }
 
 impl Piece {
-    fn new(piece_type: PieceType, color: Color, position: u8) -> Piece {
+    pub fn new(piece_type: PieceType, color: Color, position: u8) -> Piece {
         Piece {
             code: piece_type as u8 | color as u8,
             position,
         }
     }
 
-    fn from_code(code: u8, position: u8) -> Piece {
+    pub fn from_code(code: u8, position: u8) -> Piece {
         Piece { code, position }
     }
 
-    fn color(&self) -> Color {
+    pub fn color(&self) -> Color {
         Color::from_byte(self.code)
     }
 
-    fn type_(&self) -> PieceType {
+    pub fn type_(&self) -> PieceType {
         PieceType::from_byte(self.code)
     }
 
-    fn position(&self) -> usize {
+    pub fn position(&self) -> usize {
         self.position as usize
     }
 
@@ -538,8 +602,19 @@ impl Piece {
     }
 }
 
-#[derive(PartialEq)]
-enum Color {
+impl Debug for Piece {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Piece")
+            .field("code", &self.code)
+            .field("position", &self.position)
+            .field("color", &self.color())
+            .field("type", &self.type_())
+            .finish()
+    }
+}
+
+#[derive(PartialEq, Debug)]
+pub enum Color {
     Black = 0x00,
     White = 0x80,
 }
@@ -563,8 +638,8 @@ impl Into<u8> for Color {
     }
 }
 
-#[derive(PartialEq)]
-enum PieceType {
+#[derive(PartialEq, Debug)]
+pub enum PieceType {
     Pawn = 0x01,
     Knight = 0x02,
     Bishop = 0x03,
