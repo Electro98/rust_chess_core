@@ -12,7 +12,7 @@ pub enum CastlingSide {
     QueenSide = 0x00,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Move {
     /** skip of move, probably will be deleted */
     NullMove,
@@ -33,6 +33,7 @@ pub enum Move {
 }
 
 /** Variation of 0x88 board */
+#[derive(Clone)]
 pub struct Board {
     arr: [u8; 128],
 }
@@ -647,7 +648,7 @@ impl Debug for Piece {
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone, Copy)]
 pub enum Color {
     Black = 0x00,
     White = 0x80,
@@ -657,6 +658,20 @@ impl Color {
     #[inline]
     fn from_byte(byte: u8) -> Color {
         unsafe { std::mem::transmute(byte & 0x80) }
+    }
+
+    pub fn opposite(self) -> Color {
+        if self == Color::White {
+            Color::Black
+        } else {
+            Color::White
+        }
+    }
+}
+
+impl Default for Color {
+    fn default() -> Self {
+        Color::White
     }
 }
 
@@ -672,7 +687,7 @@ impl Into<u8> for Color {
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum PieceType {
     Pawn = 0x01,
     Knight = 0x02,

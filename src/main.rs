@@ -1,6 +1,6 @@
 use std::{collections::HashMap, io::BufRead};
 
-use chess_engine::{Board, Color, Move, Piece, PieceType};
+use chess_engine::{Game, UiMove, Color, Piece, PieceType};
 use eframe::{egui, epaint::Vec2};
 
 fn chess_symbol(piece: Piece) -> &'static str {
@@ -31,7 +31,7 @@ fn chess_symbol(piece: Piece) -> &'static str {
 }
 
 fn draw_app(app: &App) {
-    let board = app.board.inside();
+    let board = app.game.board().inside();
     for rank in 0..8u8 {
         for file in 0..8u8 {
             let pos = rank << 4 | file;
@@ -71,11 +71,11 @@ fn get_pos(question: &str) -> u8 {
 }
 
 struct App {
-    board: Board,
+    game: Game,
     cell_size: f32,
     current_color: Color,
     chosen_piece: Option<Piece>,
-    moves: Option<HashMap<u8, Move>>,
+    moves: Option<Vec<UiMove>>,
 }
 
 fn main() -> Result<(), eframe::Error> {
@@ -92,7 +92,7 @@ fn main() -> Result<(), eframe::Error> {
             egui_extras::install_image_loaders(&cc.egui_ctx);
 
             Box::new(App {
-                board: Board::default(),
+                game: Game::default(),
                 cell_size: 45.0,
                 current_color: Color::White,
                 chosen_piece: None,
@@ -110,7 +110,7 @@ impl eframe::App for App {
             // ui.image(egui::include_image!(
             //     "../media/Chess_bdt45.svg.png"
             // ));
-            let board = self.board.inside();
+            let board = self.game.board().inside();
             let mut move_to_exec = None;
             egui::Grid::new("main_grid")
                 .striped(true)
@@ -121,11 +121,6 @@ impl eframe::App for App {
                     for rank in 0..8u8 {
                         for file in 0..8u8 {
                             let pos = rank << 4 | file;
-                            let color = if (rank + file) % 2 == 0 {
-                                egui::Color32::LIGHT_GRAY
-                            } else {
-                                egui::Color32::DARK_GRAY
-                            };
                             let piece = Piece::from_code(board[pos as usize], pos);
                             let widget = if let Some(source) = piece_image(piece.clone()) {
                                 // ui.image(source)
@@ -134,110 +129,78 @@ impl eframe::App for App {
                                     egui::Button::image(source)
                                         .frame(false)
                                         .min_size(Vec2::new(self.cell_size, self.cell_size))
-                                        .fill({
-                                            if Some(&piece) == self.chosen_piece.as_ref() {
-                                                egui::Color32::LIGHT_GREEN
-                                            } else if let Some(moves) = &self.moves {
-                                                if moves.contains_key(&pos) {
-                                                    color.additive().gamma_multiply(1.3)
-                                                } else {
-                                                    color
-                                                }
-                                            } else {
-                                                color
-                                            }
-                                        }),
+                                        .fill(background_color(
+                                            pos as usize,
+                                            Some(piece) == self.chosen_piece,
+                                            self.moves.as_ref()
+                                                .and_then(|moves| moves.iter().find(|ui_move| ui_move.position() == pos as usize))
+                                                .is_some(),
+                                        )),
                                 )
                             } else {
                                 ui.add(
                                     egui::Button::new("")
                                         .frame(false)
                                         .min_size(Vec2::new(self.cell_size, self.cell_size))
-                                        .fill({
-                                            if let Some(moves) = &self.moves {
-                                                if moves.contains_key(&pos) {
-                                                    color.additive().gamma_multiply(1.3)
-                                                } else {
-                                                    color
-                                                }
-                                            } else {
-                                                color
-                                            }
-                                        }),
+                                        .fill(background_color(
+                                            pos as usize,
+                                            false,
+                                            self.moves.as_ref()
+                                                .and_then(|moves| moves.iter().find(|ui_move| ui_move.position() == pos as usize))
+                                                .is_some(),
+                                        )),
                                 )
                             };
                             if widget.clicked() {
                                 let piece = Piece::from_code(board[pos as usize], pos);
                                 println!("Position {} was clicked", pos);
                                 println!("Piece: {:?}", piece);
-                                if let Some(moves) = &mut self.moves {
+                                self.moves = if let Some(moves) = self.moves.as_mut() {
                                     self.current_color = piece.color();
-                                    move_to_exec = moves.remove(&pos);
+                                    move_to_exec = moves.into_iter()
+                                        .find(|_move| _move.position() == piece.position())
+                                        .and_then(|_move| Some(_move.clone()));
                                     self.chosen_piece = None;
-                                    self.moves = None;
-                                }
-                                if piece.type_() != PieceType::Invalid
+                                    None
+                                } else if piece.type_() != PieceType::Invalid
                                     && piece.type_() != PieceType::EmptySquare
-                                    && move_to_exec.is_none()
                                 {
-                                    self.chosen_piece = Some(piece.clone());
-                                    let moves = self
-                                        .board
-                                        .get_possible_moves(piece.color(), Move::NullMove);
+                                    let moves = self.game.possible_moves(
+                                        rank as u32,
+                                        file as u32,
+                                    );
+                                    self.chosen_piece = if moves.is_some() { Some(piece.clone()) } else { None };
                                     println!("Moves: {:?}", moves);
-                                    self.moves = Some(filter_moves(moves, &piece));
-                                    println!("self.moves: {:?}", self.moves);
+                                    moves
                                 } else {
                                     self.chosen_piece = None;
-                                    self.moves = None;
-                                }
+                                    None
+                                };
                             }
                         }
                         ui.end_row();
                     }
                 });
             if let Some(_move) = move_to_exec {
-                self.board.execute(_move);
-                for color in [Color::Black, Color::White] {
-                    let (checked, king) = self.board.is_checked(color);
-                    if checked {
-                        println!("{:?} is checked.", king);
-                    }
-                    self.board.castling_rights(king);
-                }
+                self.game.make_move(_move.clone());
             }
         });
     }
 }
 
-fn filter_moves(moves: Vec<Move>, piece: &Piece) -> HashMap<u8, Move> {
-    HashMap::from_iter(
-        moves
-            .into_iter()
-            .filter(|_move| match _move {
-                Move::NullMove => true,
-                Move::QuietMove(_piece, _) => piece == _piece,
-                Move::Capture(_piece, _) => piece == _piece,
-                Move::Castling(_piece, _, _) => piece == _piece,
-                Move::PromotionQuiet(_piece, _, _) => piece == _piece,
-                Move::PromotionCapture(_piece, _, _) => piece == _piece,
-                Move::PawnDoublePush(_piece, _) => piece == _piece,
-                Move::EnPassantCapture(_piece, _) => piece == _piece,
-            })
-            .map(|_move| {
-                let pos: u8 = match &_move {
-                    Move::NullMove => panic!("Null move is not valid move"),
-                    Move::QuietMove(_, pos) => *pos,
-                    Move::Capture(_, piece) => piece.position() as u8,
-                    Move::Castling(_, _, rook) => rook.position() as u8,
-                    Move::PromotionQuiet(_, pos, _) => *pos,
-                    Move::PromotionCapture(_, piece, _) => piece.position() as u8,
-                    Move::PawnDoublePush(_, pos) => *pos,
-                    Move::EnPassantCapture(_, piece) => piece.position() as u8,
-                };
-                (pos, _move)
-            }),
-    )
+fn background_color(position: usize, selected: bool, possible_move: bool) -> egui::Color32 {
+    let color = if (position.wrapping_shr(4) + position & 0x0F) % 2 == 0 {
+        egui::Color32::LIGHT_GRAY
+    } else {
+        egui::Color32::DARK_GRAY
+    }; 
+    if selected {
+        egui::Color32::LIGHT_GREEN
+    } else if possible_move {
+        color.additive().gamma_multiply(1.3)
+    } else {
+        color
+    }
 }
 
 fn piece_image(piece: Piece) -> Option<egui::ImageSource<'static>> {
