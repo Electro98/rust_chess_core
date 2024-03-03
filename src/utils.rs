@@ -1,3 +1,5 @@
+
+#[derive(Debug)]
 pub struct BetweenIterator {
     current: u8,
     target: u8,
@@ -30,25 +32,23 @@ pub fn between(from: u8, to: u8) -> BetweenIterator {
     //     ... something ...
     //     table
     // };
-    let dx: u8 = {
-        if diff & 0xf0 == 0 {
-            0
-        } else if diff & 0x80 == 0x80 {
-            0xf0
-        } else {
-            0x10
+    let step = if is_in_diagonal_line(from, to) {
+        let (file, rank) = (diff & 0x08 == 0, diff & 0x80 == 0);
+        match (file, rank) {
+            (true, true) => 0x11,
+            (true, false) => 0xf1,
+            (false, true) => 0x0f,
+            (false, false) => 0xef,
+        }
+    } else {
+        let (x_or_y, positive) = (diff & 0x0f != 0, (diff.wrapping_shr(4) | diff & 0x0f) & 0x08 == 0);
+        match (x_or_y, positive) {
+            (true, true) => 0x01,
+            (true, false) => 0xff,
+            (false, true) => 0x10,
+            (false, false) => 0xf0,
         }
     };
-    let dy: u8 = {
-        if diff & 0x0f == 0 {
-            0
-        } else if diff & 0x08 == 0x08 {
-            0x0f
-        } else {
-            0x01
-        }
-    };
-    let step = dx | dy;
     BetweenIterator {
         current: from,
         target: to,
@@ -67,7 +67,7 @@ pub fn is_in_straight_line(a: u8, b: u8) -> bool {
 
 pub fn is_in_diagonal_line(a: u8, b: u8) -> bool {
     let diff = a.abs_diff(b);
-    diff & 0x0f == diff & 0xf0
+    diff & 0x0f == (diff & 0xf0) >> 4
 }
 
 #[inline]

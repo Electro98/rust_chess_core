@@ -1,6 +1,6 @@
 use std::{collections::HashMap, io::BufRead};
 
-use chess_engine::{Game, UiMove, Color, Piece, PieceType};
+use chess_engine::{Color, Game, Piece, PieceType, UiMove};
 use eframe::{egui, epaint::Vec2};
 
 fn chess_symbol(piece: Piece) -> &'static str {
@@ -81,7 +81,7 @@ struct App {
 fn main() -> Result<(), eframe::Error> {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([480.0, 320.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([572.0, 392.0]),
         ..Default::default()
     };
     eframe::run_native(
@@ -105,86 +105,122 @@ fn main() -> Result<(), eframe::Error> {
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("My chess game");
-
-            // ui.image(egui::include_image!(
-            //     "../media/Chess_bdt45.svg.png"
-            // ));
-            let board = self.game.board().inside();
-            let mut move_to_exec = None;
-            egui::Grid::new("main_grid")
-                .striped(true)
-                .min_col_width(self.cell_size)
-                .max_col_width(self.cell_size)
-                .min_row_height(self.cell_size)
-                .show(ui, |ui| {
-                    for rank in 0..8u8 {
-                        for file in 0..8u8 {
-                            let pos = rank << 4 | file;
-                            let piece = Piece::from_code(board[pos as usize], pos);
-                            let widget = if let Some(source) = piece_image(piece.clone()) {
-                                // ui.image(source)
-                                // ui.add(egui::ImageButton::new(source).frame(false))
-                                ui.add(
-                                    egui::Button::image(source)
-                                        .frame(false)
-                                        .min_size(Vec2::new(self.cell_size, self.cell_size))
-                                        .fill(background_color(
-                                            pos as usize,
-                                            Some(piece) == self.chosen_piece,
-                                            self.moves.as_ref()
-                                                .and_then(|moves| moves.iter().find(|ui_move| ui_move.position() == pos as usize))
-                                                .is_some(),
-                                        )),
-                                )
-                            } else {
-                                ui.add(
-                                    egui::Button::new("")
-                                        .frame(false)
-                                        .min_size(Vec2::new(self.cell_size, self.cell_size))
-                                        .fill(background_color(
-                                            pos as usize,
-                                            false,
-                                            self.moves.as_ref()
-                                                .and_then(|moves| moves.iter().find(|ui_move| ui_move.position() == pos as usize))
-                                                .is_some(),
-                                        )),
-                                )
-                            };
-                            if widget.clicked() {
-                                let piece = Piece::from_code(board[pos as usize], pos);
-                                println!("Position {} was clicked", pos);
-                                println!("Piece: {:?}", piece);
-                                self.moves = if let Some(moves) = self.moves.as_mut() {
-                                    self.current_color = piece.color();
-                                    move_to_exec = moves.into_iter()
-                                        .find(|_move| _move.position() == piece.position())
-                                        .and_then(|_move| Some(_move.clone()));
-                                    self.chosen_piece = None;
-                                    None
-                                } else if piece.type_() != PieceType::Invalid
-                                    && piece.type_() != PieceType::EmptySquare
-                                {
-                                    let moves = self.game.possible_moves(
-                                        rank as u32,
-                                        file as u32,
-                                    );
-                                    self.chosen_piece = if moves.is_some() { Some(piece.clone()) } else { None };
-                                    println!("Moves: {:?}", moves);
-                                    moves
-                                } else {
-                                    self.chosen_piece = None;
-                                    None
-                                };
-                            }
+            ui.horizontal(|ui| {
+                let move_to_exec = self.grid(ui);
+                ui.vertical(|ui| {
+                    ui.heading("Test chess");
+                    ui.label(format!("Current player: {}", {
+                        if self.game.current_player() == Color::White {
+                            "White"
+                        } else {
+                            "Black"
                         }
-                        ui.end_row();
+                    }));
+                    ui.label(format!("Is checked: {}", self.game.checked()));
+                    if self.game.finished() {
+                        ui.label("Game finished!");
+                        if ui.button("Restart?").clicked() {
+                            self.game = Game::default();
+                            self.current_color = Color::White;
+                            self.chosen_piece = None;
+                            self.moves = None;
+                        };
                     }
                 });
-            if let Some(_move) = move_to_exec {
-                self.game.make_move(_move.clone());
-            }
+                if let Some(_move) = move_to_exec {
+                    self.game.make_move(_move.clone());
+                }
+            });
         });
+    }
+}
+
+impl App {
+    fn grid(&mut self, ui: &mut egui::Ui) -> Option<UiMove> {
+        let board = self.game.board().inside();
+        let mut move_to_exec = None;
+        egui::Grid::new("main_grid")
+            .striped(true)
+            .min_col_width(self.cell_size)
+            .max_col_width(self.cell_size)
+            .min_row_height(self.cell_size)
+            .show(ui, |ui| {
+                for rank in 0..8u8 {
+                    for file in 0..8u8 {
+                        let pos = rank << 4 | file;
+                        let piece = Piece::from_code(board[pos as usize], pos);
+                        let widget = if let Some(source) = piece_image(piece.clone()) {
+                            // ui.image(source)
+                            // ui.add(egui::ImageButton::new(source).frame(false))
+                            ui.add(
+                                egui::Button::image(source)
+                                    .frame(false)
+                                    .min_size(Vec2::new(self.cell_size, self.cell_size))
+                                    .fill(background_color(
+                                        pos as usize,
+                                        Some(piece) == self.chosen_piece,
+                                        self.moves
+                                            .as_ref()
+                                            .and_then(|moves| {
+                                                moves.iter().find(|ui_move| {
+                                                    ui_move.position() == pos as usize
+                                                })
+                                            })
+                                            .is_some(),
+                                    )),
+                            )
+                        } else {
+                            ui.add(
+                                egui::Button::new("")
+                                    .frame(false)
+                                    .min_size(Vec2::new(self.cell_size, self.cell_size))
+                                    .fill(background_color(
+                                        pos as usize,
+                                        false,
+                                        self.moves
+                                            .as_ref()
+                                            .and_then(|moves| {
+                                                moves.iter().find(|ui_move| {
+                                                    ui_move.position() == pos as usize
+                                                })
+                                            })
+                                            .is_some(),
+                                    )),
+                            )
+                        };
+                        if widget.clicked() {
+                            let piece = Piece::from_code(board[pos as usize], pos);
+                            println!("Position {} was clicked", pos);
+                            println!("Piece: {:?}", piece);
+                            self.moves = if let Some(moves) = self.moves.as_mut() {
+                                self.current_color = piece.color();
+                                move_to_exec = moves
+                                    .into_iter()
+                                    .find(|_move| _move.position() == piece.position())
+                                    .and_then(|_move| Some(_move.clone()));
+                                self.chosen_piece = None;
+                                None
+                            } else if piece.type_() != PieceType::Invalid
+                                && piece.type_() != PieceType::EmptySquare
+                            {
+                                let moves = self.game.possible_moves(rank as u32, file as u32);
+                                self.chosen_piece = if moves.is_some() {
+                                    Some(piece.clone())
+                                } else {
+                                    None
+                                };
+                                println!("Moves: {:?}", moves);
+                                moves
+                            } else {
+                                self.chosen_piece = None;
+                                None
+                            };
+                        }
+                    }
+                    ui.end_row();
+                }
+            });
+        move_to_exec
     }
 }
 
@@ -193,7 +229,7 @@ fn background_color(position: usize, selected: bool, possible_move: bool) -> egu
         egui::Color32::LIGHT_GRAY
     } else {
         egui::Color32::DARK_GRAY
-    }; 
+    };
     if selected {
         egui::Color32::LIGHT_GREEN
     } else if possible_move {

@@ -258,7 +258,7 @@ impl Board {
             for rank in 0..8u8 {
                 let pos = rank << 4 | file;
                 let cell = Piece::from_code(self.arr[pos as usize], pos);
-                if cell.code != 0x00 && cell.color() != color && cell.can_attack(piece.position) {
+                if cell.code != 0x00 && cell.color() != color && cell.can_attack(piece.position, self.arr) {
                     attackers.push(cell);
                 }
             }
@@ -275,7 +275,7 @@ impl Board {
             for rank in 0..8u8 {
                 let pos = rank << 4 | file;
                 let piece = Piece::from_code(self.arr[pos as usize], pos);
-                if piece.code != 0x00 && piece.color() != color && piece.can_attack(position) {
+                if piece.code != 0x00 && piece.color() != color && piece.can_attack(position, self.arr) {
                     return true;
                 }
             }
@@ -352,7 +352,7 @@ impl Board {
                         }
                         // enpassant
                         if let Some(pawn) = &enpassant_pawn {
-                            if pawn.position.abs_diff(piece.position) == 0x01 {
+                            if pawn.position.abs_diff(piece.position) == 0x01 && pawn.color() != color {
                                 possible_moves.push(Move::EnPassantCapture(piece, pawn.clone()))
                             }
                         }
@@ -399,9 +399,9 @@ impl Board {
                                 && Color::from_byte(cell) == color
                                 && PieceType::from_byte(cell) == PieceType::Rook
                                 && piece_flag.is_set(piece.code)
-                            && between(rook_pos, piece.position)
-                                .map(|pos| self.arr[pos as usize])
-                                .all(|code| code == 0x00)
+                                && between(rook_pos, piece.position)
+                                    .map(|pos| self.arr[pos as usize])
+                                    .all(|code| code == 0x00)
                             {
                                 possible_moves.push(Move::Castling(
                                     piece.clone(),
@@ -602,7 +602,7 @@ impl Piece {
         self.position as usize
     }
 
-    fn can_attack(&self, target: u8) -> bool {
+    fn can_attack(&self, target: u8, board: [u8; 128]) -> bool {
         // precomputed tables should increase speed of this dramatically
         match self.type_() {
             PieceType::Pawn => {
@@ -611,20 +611,26 @@ impl Piece {
                     Color::Black => 0xf0,
                 };
                 distance(self.position, target) == 2
-                    && (self.position & 0xf0).wrapping_add(step) == target
+                    && (self.position & 0xf0).wrapping_add(step) == target & 0xf0
             }
             PieceType::Bishop => {
                 is_in_diagonal_line(self.position, target)
-                    && between(self.position, target).all(|cell| cell == 0x00)
+                    && between(self.position, target)
+                        .map(|pos| board[pos as usize])
+                        .all(|cell| cell == 0x00)
             }
             PieceType::Rook => {
                 is_in_straight_line(self.position, target)
-                    && between(self.position, target).all(|cell| cell == 0x00)
+                    && between(self.position, target)
+                        .map(|pos| board[pos as usize])
+                        .all(|cell| cell == 0x00)
             }
             PieceType::Queen => {
                 (is_in_straight_line(self.position, target)
                     || is_in_diagonal_line(self.position, target))
-                    && between(self.position, target).all(|cell| cell == 0x00)
+                    && between(self.position, target)
+                        .map(|pos| board[pos as usize])
+                        .all(|cell| cell == 0x00)
             }
             PieceType::Knight => {
                 let diff = (self.position & 0x0f).abs_diff(target & 0x0f);
