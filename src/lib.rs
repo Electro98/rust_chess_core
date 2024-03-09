@@ -1,8 +1,10 @@
+mod definitions;
 mod engine;
 mod game;
 mod utils;
-pub use engine::{Color, Piece, PieceType};
-pub use game::*;
+pub use definitions::{Cell, Figure, MatchInterface, Move};
+pub use engine::{Color, PieceType};
+pub use game::Game;
 
 pub fn add(a: i32, b: i32) -> i32 {
     a + b

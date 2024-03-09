@@ -1,4 +1,3 @@
-
 #[derive(Debug)]
 pub struct BetweenIterator {
     current: u8,
@@ -41,7 +40,10 @@ pub fn between(from: u8, to: u8) -> BetweenIterator {
             (false, false) => 0xef,
         }
     } else {
-        let (x_or_y, positive) = (diff & 0x0f != 0, (diff.wrapping_shr(4) | diff & 0x0f) & 0x08 == 0);
+        let (x_or_y, positive) = (
+            diff & 0x0f != 0,
+            (diff.wrapping_shr(4) | diff & 0x0f) & 0x08 == 0,
+        );
         match (x_or_y, positive) {
             (true, true) => 0x01,
             (true, false) => 0xff,
@@ -57,7 +59,7 @@ pub fn between(from: u8, to: u8) -> BetweenIterator {
 }
 
 pub fn distance(from: u8, to: u8) -> u8 {
-    (from & 0x0f).abs_diff(to & 0x0f) + (from & 0xf0 >> 4).abs_diff(to & 0xf0 >> 4)
+    (from & 0x0f).abs_diff(to & 0x0f) + ((from & 0xf0) >> 4).abs_diff((to & 0xf0) >> 4)
 }
 
 pub fn is_in_straight_line(a: u8, b: u8) -> bool {

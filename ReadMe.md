@@ -7,7 +7,7 @@ That's just chess engine for my "Dark Chess" game as my student diploma project.
    - [X] Chess board
    - [X] Chess piece
    - [X] Move
-   - [ ] History of moves
+   - [X] History of moves
  - [ ] Write logic for:
    - [X] Making a move
    - [X] Undo a move
@@ -15,9 +15,9 @@ That's just chess engine for my "Dark Chess" game as my student diploma project.
    - [X] Allowing Checks and Mate
    - [X] Castling right check
  - [ ] Make basic interface?
-   - [ ] Display board
+   - [X] Display board
    - [ ] Make moves colorful
-   - [ ] Display checks and mates
+   - [X] Display checks and mates
  - [ ] Create kotling bindings
    - [ ] Compile it
    - [ ] Make it works

@@ -4,6 +4,7 @@ use std::{fmt::Debug, iter::zip};
 
 use log::{debug, trace};
 
+use crate::definitions::ImplicitMove;
 use crate::utils::{between, distance, is_in_diagonal_line, is_in_straight_line, is_valid_coord};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -30,6 +31,24 @@ pub enum Move {
     PawnDoublePush(Piece, u8),
     /** who is capturing, whom is beeing captured */
     EnPassantCapture(Piece, Piece),
+}
+
+impl ImplicitMove for Move {
+    fn promotion(&self) -> bool {
+        match self {
+            Move::PromotionQuiet(_, _, _) => true,
+            Move::PromotionCapture(_, _, _) => true,
+            _ => false,
+        }
+    }
+
+    fn set_promotion_type(&mut self, king: PieceType) {
+        match self {
+            Move::PromotionQuiet(_, _, _type) => *_type = king,
+            Move::PromotionCapture(_, _, _type) => *_type = king,
+            _ => panic!("`set_promotion_type` on non-promotion move"),
+        }
+    }
 }
 
 /** Variation of 0x88 board */
@@ -258,7 +277,10 @@ impl Board {
             for rank in 0..8u8 {
                 let pos = rank << 4 | file;
                 let cell = Piece::from_code(self.arr[pos as usize], pos);
-                if cell.code != 0x00 && cell.color() != color && cell.can_attack(piece.position, self.arr) {
+                if cell.code != 0x00
+                    && cell.color() != color
+                    && cell.can_attack(piece.position, self.arr)
+                {
                     attackers.push(cell);
                 }
             }
@@ -275,7 +297,10 @@ impl Board {
             for rank in 0..8u8 {
                 let pos = rank << 4 | file;
                 let piece = Piece::from_code(self.arr[pos as usize], pos);
-                if piece.code != 0x00 && piece.color() != color && piece.can_attack(position, self.arr) {
+                if piece.code != 0x00
+                    && piece.color() != color
+                    && piece.can_attack(position, self.arr)
+                {
                     return true;
                 }
             }
@@ -352,7 +377,9 @@ impl Board {
                         }
                         // enpassant
                         if let Some(pawn) = &enpassant_pawn {
-                            if pawn.position.abs_diff(piece.position) == 0x01 && pawn.color() != color {
+                            if pawn.position.abs_diff(piece.position) == 0x01
+                                && pawn.color() != color
+                            {
                                 possible_moves.push(Move::EnPassantCapture(piece, pawn.clone()))
                             }
                         }

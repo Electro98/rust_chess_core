@@ -1,13 +1,13 @@
 use std::{collections::HashMap, io::BufRead};
 
-use chess_engine::{Color, Game, Piece, PieceType, UiMove};
+use chess_engine::{Color, Figure, Game, MatchInterface, Move, PieceType};
 use eframe::{egui, epaint::Vec2};
 
-fn chess_symbol(piece: Piece) -> &'static str {
+fn chess_symbol(figure: Figure) -> &'static str {
     use Color::*;
     use PieceType::*;
-    match piece.color() {
-        Black => match piece.type_() {
+    match figure.color {
+        Black => match figure.kind {
             Pawn => "♟︎",
             Knight => "♞",
             Bishop => "♝",
@@ -17,7 +17,7 @@ fn chess_symbol(piece: Piece) -> &'static str {
             Invalid => "#",
             EmptySquare => " ",
         },
-        White => match piece.type_() {
+        White => match figure.kind {
             Pawn => "♙",
             Knight => "♘",
             Bishop => "♗",
@@ -31,12 +31,30 @@ fn chess_symbol(piece: Piece) -> &'static str {
 }
 
 fn draw_app(app: &App) {
-    let board = app.game.board().inside();
-    for rank in 0..8u8 {
-        for file in 0..8u8 {
-            let pos = rank << 4 | file;
-            let piece = Piece::from_code(board[pos as usize], pos);
-            print!("{} ", chess_symbol(piece));
+    let board = app.game.current_board();
+    for rank in 0..8 {
+        for file in 0..8 {
+            let cell = board[rank][file];
+            print!(
+                "{} ",
+                chess_symbol(match cell {
+                    chess_engine::Cell::Figure(figure) => figure,
+                    chess_engine::Cell::Empty => Figure {
+                        kind: PieceType::Invalid,
+                        color: Color::White,
+                        last_move: false,
+                        impose_check: false,
+                        can_move: false
+                    },
+                    chess_engine::Cell::Unknown => Figure {
+                        kind: PieceType::Invalid,
+                        color: Color::White,
+                        last_move: false,
+                        impose_check: false,
+                        can_move: false
+                    },
+                })
+            );
         }
         print!("\n");
     }
