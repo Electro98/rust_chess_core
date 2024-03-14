@@ -1,7 +1,6 @@
 use crate::engine::{Board, Color, Move as ImplMove, Piece, PieceType};
 use crate::{Cell, Figure, MatchInterface, Move};
 
-#[derive(Default)]
 pub struct Game {
     board: Board,
     current_player: Color,
@@ -66,9 +65,35 @@ impl Game {
     }
 }
 
+impl Default for Game {
+    fn default() -> Self {
+        Game::new(Default::default())
+    }
+}
+
 impl MatchInterface<ImplMove> for Game {
     fn current_board(&self) -> Vec<Vec<Cell>> {
-        todo!()
+        let mut board = Vec::with_capacity(8);
+        for rank in 0..8u8 {
+            let mut row = Vec::with_capacity(8);
+            for file in 0..8u8 {
+                let pos = (rank << 4) + file;
+                let piece = Piece::from_code(self.board.inside()[pos as usize], pos);
+                row.push(if piece.type_() == PieceType::EmptySquare {
+                    Cell::Empty
+                } else {
+                    Cell::Figure(Figure {
+                        kind: piece.type_(),
+                        color: piece.color(),
+                        last_move: false,
+                        impose_check: false,
+                        can_move: true,
+                    })
+                });
+            }
+            board.push(row);
+        }
+        board
     }
 
     fn possible_moves(&self, rank: u32, file: u32) -> Option<Vec<Move<ImplMove>>> {
@@ -77,7 +102,8 @@ impl MatchInterface<ImplMove> for Game {
         }
         let pos = (rank << 4) as u8 | file as u8;
         let piece = Piece::from_code(self.board.inside()[pos as usize], pos);
-        if piece.type_() == PieceType::EmptySquare && piece.color() != self.current_player {
+        println!("Piece: {:?}", piece);
+        if piece.type_() == PieceType::EmptySquare || piece.color() != self.current_player {
             return None;
         }
         let moves: Vec<_> = self
@@ -129,11 +155,12 @@ impl MatchInterface<ImplMove> for Game {
     }
 
     fn execute_move(&mut self, _move: Move<ImplMove>) {
-        todo!()
+        self.make_move(_move._move.clone());
+        self.history.push(_move);
     }
 
     fn wait_move(&self) {
-        todo!()
+        // nothing
     }
 
     fn current_player(&self) -> Color {

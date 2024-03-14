@@ -21,7 +21,7 @@ pub trait ImplicitMove {
     fn set_promotion_type(&mut self, kind: PieceType);
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Move<T: ImplicitMove> {
     pub from: (u32, u32),
     pub to: (u32, u32),
