@@ -1,5 +1,5 @@
 mod definitions;
-mod engine;
+pub mod engine;
 mod game;
 mod utils;
 pub use definitions::{Cell, Figure, MatchInterface, Move};

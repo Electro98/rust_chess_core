@@ -1,5 +1,6 @@
 use crate::engine::{Color, PieceType};
 
+#[derive(Clone, Debug, PartialEq)]
 pub struct Figure {
     pub kind: PieceType,
     pub color: Color,
@@ -8,6 +9,7 @@ pub struct Figure {
     pub can_move: bool,
 }
 
+#[derive(Debug)]
 pub enum Cell {
     Empty,
     Figure(Figure),
@@ -16,9 +18,10 @@ pub enum Cell {
 
 pub trait ImplicitMove {
     fn promotion(&self) -> bool;
-    fn set_promotion_type(&mut self, king: PieceType);
+    fn set_promotion_type(&mut self, kind: PieceType);
 }
 
+#[derive(Clone)]
 pub struct Move<T: ImplicitMove> {
     pub from: (u32, u32),
     pub to: (u32, u32),

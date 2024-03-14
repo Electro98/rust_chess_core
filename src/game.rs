@@ -11,7 +11,7 @@ pub struct Game {
 }
 
 impl Game {
-    fn new(board: Board) -> Game {
+    pub fn new(board: Board) -> Game {
         Game::with_player(board, Color::White)
     }
 
@@ -31,7 +31,7 @@ impl Game {
         }
     }
 
-    pub fn make_move(&mut self, impl_move: ImplMove) {
+    fn make_move(&mut self, impl_move: ImplMove) {
         self.board.execute(impl_move.clone());
         // let prev_player = self.current_player;
         self.current_player = if self.current_player == Color::White {
