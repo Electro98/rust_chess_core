@@ -147,6 +147,7 @@ impl eframe::App for App {
                 });
                 if let Some(_move) = move_to_exec {
                     self.game.execute_move(_move);
+                    self.game.wait_move();
                 }
             });
         });

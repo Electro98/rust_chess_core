@@ -32,7 +32,7 @@ pub trait MatchInterface<T: ImplicitMove> {
     fn current_board(&self) -> Vec<Vec<Cell>>;
     fn possible_moves(&self, file: u32, rank: u32) -> Option<Vec<Move<T>>>;
     fn execute_move(&mut self, _move: Move<T>);
-    fn wait_move(&self);
+    fn wait_move(&mut self);
     // info
     fn current_player(&self) -> Color;
     fn checked(&self) -> bool;
