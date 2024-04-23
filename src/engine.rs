@@ -33,6 +33,33 @@ pub enum Move {
     EnPassantCapture(Piece, Piece),
 }
 
+impl Move {
+    pub fn piece(&self) -> Option<&Piece> {
+        match self {
+            Move::QuietMove(piece, _) => Some(piece),
+            Move::Capture(piece, _) => Some(piece),
+            Move::Castling(piece, _, _) => Some(piece),
+            Move::PromotionQuiet(piece, _, _) => Some(piece),
+            Move::PromotionCapture(piece, _, _) => Some(piece),
+            Move::PawnDoublePush(piece, _) => Some(piece),
+            Move::EnPassantCapture(piece, _) => Some(piece),
+            Move::NullMove => None,
+        }
+    }
+    pub fn end_position(&self) -> Option<u8> {
+        match &self {
+            Move::QuietMove(_, pos) => Some(*pos),
+            Move::Capture(_, piece) => Some(piece.position() as u8),
+            Move::Castling(_, _, piece) => Some(piece.position() as u8),
+            Move::PromotionQuiet(_, pos, _) => Some(*pos),
+            Move::PromotionCapture(_, piece, _) => Some(piece.position() as u8),
+            Move::PawnDoublePush(_, pos) => Some(*pos),
+            Move::EnPassantCapture(_, piece) => Some(piece.position() as u8),
+            Move::NullMove => None,
+        }
+    }
+}
+
 impl ImplicitMove for Move {
     fn promotion(&self) -> bool {
         match self {
@@ -308,7 +335,7 @@ impl Board {
         false
     }
 
-    pub fn get_possible_moves(&self, color: Color, last_move: Move) -> Vec<Move> {
+    pub fn get_possible_moves(&self, color: Color, last_move: Move, bot: bool) -> Vec<Move> {
         // Check for pawn double push
         let enpassant_pawn = match last_move {
             Move::PawnDoublePush(pawn, pos) => Some(Piece::from_code(pawn.code, pos)),
@@ -471,10 +498,34 @@ impl Board {
                 }
             }
         }
+        if bot {
+            for idx in 0..possible_moves.len() {
+                let _move = possible_moves[idx].clone();
+                match _move {
+                    Move::PromotionQuiet(pawn, pos, _) => {
+                        for _type in [PieceType::Knight, PieceType::Rook, PieceType::Bishop] {
+                            possible_moves.push(Move::PromotionQuiet(pawn.clone(), pos, _type));
+                        }
+                        possible_moves[idx] = Move::PromotionQuiet(pawn, pos, PieceType::Queen);
+                    }
+                    Move::PromotionCapture(pawn, piece, _) => {
+                        for _type in [PieceType::Knight, PieceType::Rook, PieceType::Bishop] {
+                            possible_moves.push(Move::PromotionCapture(
+                                pawn.clone(),
+                                piece.clone(),
+                                _type,
+                            ));
+                        }
+                        possible_moves[idx] = Move::PromotionCapture(pawn, piece, PieceType::Queen);
+                    }
+                    _ => {}
+                }
+            }
+        }
         possible_moves
     }
 
-    pub fn is_checked(&self, color: Color) -> (bool, Piece) {
+    pub fn is_checked(&self, color: Color) -> Option<(bool, Piece)> {
         for file in 0..8u8 {
             for rank in 0..8u8 {
                 let pos = rank << 4 | file;
@@ -482,11 +533,10 @@ impl Board {
                 if piece.type_() != PieceType::King || piece.color() != color {
                     continue;
                 }
-                return (self.is_attacked(piece.position, color), piece);
+                return Some((self.is_attacked(piece.position, color), piece));
             }
         }
-        (true, Piece::new(PieceType::Invalid, color, 0xff))
-        // panic!("Where is the king?????????????????????????????")
+        None
     }
 
     pub fn castling_right_check(&self, king: Piece) -> (bool, bool) {

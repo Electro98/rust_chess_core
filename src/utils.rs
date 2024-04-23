@@ -76,3 +76,12 @@ pub fn is_in_diagonal_line(a: u8, b: u8) -> bool {
 pub fn is_valid_coord(coord: u8) -> bool {
     coord & 0x88 == 0x00
 }
+
+pub fn compact_pos(rank: u8, file: u8) -> u8 {
+    (rank as u8) << 4 | (file as u8)
+}
+
+pub fn unpack_pos<T: From<u8>, V: Into<u8>>(pos: V) -> (T, T) {
+    let pos: u8 = pos.into();
+    (((pos & 0xf0) >> 4).into(), (pos & 0x0f).into())
+}

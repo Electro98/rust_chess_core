@@ -1,7 +1,7 @@
 use std::io::BufRead;
 
 use chess_engine::engine::Move as ImplMove;
-use chess_engine::{Cell, Color, Figure, Game, MatchInterface, Move, PieceType};
+use chess_engine::{Cell, Color, DefaultMove, Figure, Game, MatchInterface, PieceType};
 use eframe::{egui, epaint::Vec2};
 
 fn chess_symbol(figure: &Figure) -> &'static str {
@@ -94,7 +94,7 @@ struct App {
     cell_size: f32,
     chosen_figure: Option<Figure>,
     selected_cell: Option<(usize, usize)>,
-    moves: Option<Vec<Move<ImplMove>>>,
+    moves: Option<Vec<DefaultMove>>,
 }
 
 fn main() -> Result<(), eframe::Error> {
@@ -155,7 +155,7 @@ impl eframe::App for App {
 }
 
 impl App {
-    fn grid(&mut self, ui: &mut egui::Ui) -> Option<Move<ImplMove>> {
+    fn grid(&mut self, ui: &mut egui::Ui) -> Option<DefaultMove> {
         let board = self.game.current_board();
         let mut move_to_exec = None;
         egui::Grid::new("main_grid")
