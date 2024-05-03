@@ -5,6 +5,14 @@ edition = "2021"
 default-run = "chess"
 
 [[bin]]
+name = "server"
+path = "src/server.rs"
+
+[[bin]]
+name = "client"
+path = "src/client.rs"
+
+[[bin]]
 name = "chess"
 path = "src/main.rs"
 
@@ -18,6 +26,13 @@ env_logger = { version = "0.11.0", features = [
     "auto-color",
     "humantime",
 ] }
+futures = "0.3.30"
 log = "0.4.20"
 num-traits = "0.2.18"
 rand = "0.8.5"
+tokio = { version = "1.37.0", features = ["full"] }
+tokio-stream = "0.1.15"
+tungstenite = "0.21.0"
+url = "2.5.0"
+uuid = { version = "1.8.0", features = ["v4"] }
+warp = "0.3.7"
