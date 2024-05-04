@@ -2,7 +2,6 @@ use chess_engine::engine::Move as ImplMove;
 use chess_engine::{Cell, Color, DefaultMove, Figure, Game, MatchInterface, PieceType};
 use eframe::{egui, epaint::Vec2};
 
-
 struct App {
     game: Game,
     cell_size: f32,

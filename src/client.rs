@@ -5,9 +5,9 @@ fn main() {
     println!("It's client!");
     env_logger::init();
 
-    let (mut socket, response) = tungstenite::connect(
-        Url::parse("ws://127.0.0.1:3030/ws").unwrap())
-        .expect("Failed to connect");
+    let (mut socket, response) =
+        tungstenite::connect(Url::parse("ws://127.0.0.1:3030/ws").unwrap())
+            .expect("Failed to connect");
 
     println!("Connected to the server");
     println!("Response HTTP code: {}", response.status());
