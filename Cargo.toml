@@ -6,7 +6,7 @@ default-run = "chess"
 
 [[bin]]
 name = "server"
-path = "src/server.rs"
+path = "src/server_bin.rs"
 
 [[bin]]
 name = "client"
