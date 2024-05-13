@@ -3,17 +3,19 @@
 use std::{fmt::Debug, iter::zip};
 
 use log::{debug, trace};
+use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, Bytes};
 
 use crate::definitions::ImplicitMove;
 use crate::utils::{between, distance, is_in_diagonal_line, is_in_straight_line, is_valid_coord};
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum CastlingSide {
     KingSide = 0x07,
     QueenSide = 0x00,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Move {
     /** skip of move, probably will be deleted */
     NullMove,
@@ -79,8 +81,10 @@ impl ImplicitMove for Move {
 }
 
 /** Variation of 0x88 board */
-#[derive(Clone)]
+#[serde_as]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Board {
+    #[serde_as(as = "Bytes")]
     arr: [u8; 128],
 }
 
@@ -624,7 +628,7 @@ const KNIGHT_MOVES: &[u8] = &[0x12, 0x21, 0x1f, 0x0e, 0xee, 0xdf, 0xe1, 0xf2];
  * - 6 -- King
  * - 7 -- Not used
  * - 0 -- Empty Square */
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct Piece {
     code: u8,
     position: u8,
@@ -732,7 +736,7 @@ impl Debug for Piece {
     }
 }
 
-#[derive(PartialEq, Debug, Clone, Copy)]
+#[derive(PartialEq, Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum Color {
     Black = 0x00,
     White = 0x80,
@@ -771,7 +775,7 @@ impl Into<u8> for Color {
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum PieceType {
     Pawn = 0x01,
     Knight = 0x02,

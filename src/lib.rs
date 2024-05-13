@@ -2,7 +2,7 @@ mod definitions;
 pub mod engine;
 mod game;
 mod utils;
-pub use definitions::{Cell, DefaultMove, Figure, MatchInterface};
+pub use definitions::{Cell, DefaultMove, Figure, GameState, MatchInterface};
 pub use engine::{Color, PieceType};
 pub use game::Game;
 

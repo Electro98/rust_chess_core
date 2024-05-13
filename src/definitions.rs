@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use crate::engine::{Color, Move as BaseMove, PieceType};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -21,8 +23,8 @@ pub trait ImplicitMove {
     fn set_promotion_type(&mut self, kind: PieceType);
 }
 
-#[derive(Clone, Debug)]
-pub struct Move<T: ImplicitMove> {
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Move<T: ImplicitMove + Serialize> {
     pub from: (u32, u32),
     pub to: (u32, u32),
     pub _move: T,
@@ -30,7 +32,7 @@ pub struct Move<T: ImplicitMove> {
 
 pub type DefaultMove = Move<BaseMove>;
 
-pub trait MatchInterface<T: ImplicitMove> {
+pub trait MatchInterface<T: ImplicitMove + for<'a> Deserialize<'a> + Serialize> {
     fn current_board(&self) -> Vec<Vec<Cell>>;
     fn possible_moves(&self, file: u32, rank: u32) -> Option<Vec<Move<T>>>;
     fn execute_move(&mut self, _move: Move<T>) -> GameState;
@@ -51,7 +53,7 @@ pub enum GameState {
 // Implementation block
 // ---
 
-impl<T: ImplicitMove> Move<T> {
+impl<T: ImplicitMove + for<'a> Deserialize<'a> + Serialize> Move<T> {
     pub fn is_promotion(&self) -> bool {
         self._move.promotion()
     }

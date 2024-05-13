@@ -125,6 +125,10 @@ impl Game {
             return GameState::Finished;
         }
     }
+
+    pub fn vision_board(&self, player: Color) -> Board {
+        self.board.clone()
+    }
 }
 
 impl Default for Game {

@@ -1,4 +1,3 @@
-use std::convert::Infallible;
 use warp::Filter;
 
 mod server;
@@ -29,7 +28,7 @@ async fn main() {
     warp::serve(routes).run(([127, 0, 0, 1], 3030)).await;
 }
 
-fn with<T>(value: T) -> impl Filter<Extract = (T,), Error = Infallible> + Clone
+fn with<T>(value: T) -> impl Filter<Extract = (T,), Error = std::convert::Infallible> + Clone
 where
     T: Clone + std::marker::Send,
 {
