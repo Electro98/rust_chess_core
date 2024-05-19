@@ -82,7 +82,7 @@ impl ImplicitMove for Move {
 
 /** Variation of 0x88 board */
 #[serde_as]
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Board {
     #[serde_as(as = "Bytes")]
     arr: [u8; 128],

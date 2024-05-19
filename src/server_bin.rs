@@ -1,9 +1,7 @@
 use warp::Filter;
 
-mod server;
-
-use crate::server::definitions::*;
-use crate::server::handlers::*;
+use chess_engine::server::definitions::*;
+use chess_engine::server::handlers::*;
 
 #[tokio::main]
 async fn main() {

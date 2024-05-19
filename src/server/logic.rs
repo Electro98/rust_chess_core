@@ -1,4 +1,4 @@
-use chess_engine::{Color, GameState, MatchInterface};
+use crate::{Color, GameState, MatchInterface};
 use futures::{FutureExt, StreamExt};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::UnboundedReceiverStream;
@@ -69,6 +69,8 @@ pub async fn client_connection(ws: WebSocket, rooms: Rooms, room_name: Option<St
             ClientMessage::GameStateSync(
                 room.game.vision_board(player),
                 room.game.current_player(),
+                player,
+                host.is_some(),
             ),
         );
         if let Some(host) = host {
@@ -108,6 +110,8 @@ pub async fn client_connection(ws: WebSocket, rooms: Rooms, room_name: Option<St
                 trc!("Deleted room '{}' with finished game", room_name);
             } else if let Some(client) = room.get_player(player.opposite()) {
                 send_message(client, ClientMessage::OpponentDisconected);
+                *room.get_player_mut(player) = None;
+                trc!("Player '{}' has been disconnected!", id);
             }
         } else {
             err!("Failed to find room '{}'", room_name);
@@ -130,22 +134,26 @@ async fn client_msg(msg: Message, rooms: &Rooms, room: &GameId, client_id: Uuid,
                 if room.game.current_player() == player {
                     match room.game.execute_move(_move) {
                         GameState::PlayerMove(player) => {
+                            let opponent = player.opposite();
                             if let Some(client) = room.get_player(player) {
                                 send_message(
                                     client,
                                     ClientMessage::GameStateSync(
                                         room.game.vision_board(player),
                                         player,
+                                        player,
+                                        room.get_player(opponent).is_some(),
                                     ),
                                 );
                             }
-                            let opponent = player.opposite();
                             if let Some(client) = room.get_player(opponent) {
                                 send_message(
                                     client,
                                     ClientMessage::GameStateSync(
                                         room.game.vision_board(opponent),
                                         player,
+                                        opponent,
+                                        room.get_player(player).is_some(),
                                     ),
                                 );
                             }
@@ -155,7 +163,10 @@ async fn client_msg(msg: Message, rooms: &Rooms, room: &GameId, client_id: Uuid,
                     }
                 }
             } else {
-                debg!("Probably bug, but room '{}' don't exist and received message.", room);
+                debg!(
+                    "Probably bug, but room '{}' don't exist and received message.",
+                    room
+                );
             }
         }
         _ => {

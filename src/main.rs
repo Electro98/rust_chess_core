@@ -1,6 +1,9 @@
 use chess_engine::engine::Move as ImplMove;
 use chess_engine::{Cell, Color, DefaultMove, Figure, Game, MatchInterface, PieceType};
 use eframe::{egui, epaint::Vec2};
+use gui::{background_color, piece_image};
+
+mod gui;
 
 struct App {
     game: Game,
@@ -80,47 +83,32 @@ impl App {
                 for rank in 0..8 {
                     for file in 0..8 {
                         let cell = &board[rank][file];
-                        let widget = if let Some(source) = piece_image(cell) {
-                            // ui.image(source)
-                            // ui.add(egui::ImageButton::new(source).frame(false))
-                            let selected = self.selected_cell == Some((rank, file));
-                            ui.add(
-                                egui::Button::image(source)
-                                    .frame(false)
-                                    .min_size(Vec2::new(self.cell_size, self.cell_size))
-                                    .fill(background_color(
-                                        (rank, file),
-                                        selected,
-                                        self.moves
-                                            .as_ref()
-                                            .and_then(|moves| {
-                                                moves.iter().find(|_move| {
-                                                    _move.to == (rank as u32, file as u32)
-                                                })
-                                            })
-                                            .is_some(),
-                                    )),
-                            )
+                        let btn = if let Some(source) = piece_image(cell) {
+                            egui::Button::image(source)
                         } else {
-                            ui.add(
-                                egui::Button::new("")
-                                    .frame(false)
-                                    .min_size(Vec2::new(self.cell_size, self.cell_size))
-                                    .fill(background_color(
-                                        (rank, file),
-                                        false,
-                                        self.moves
-                                            .as_ref()
-                                            .and_then(|moves| {
-                                                moves.iter().find(|_move| {
-                                                    _move.to == (rank as u32, file as u32)
-                                                })
-                                            })
-                                            .is_some(),
-                                    )),
-                            )
+                            egui::Button::new("")
                         };
-                        if widget.clicked() {
+                        let selected = self
+                            .selected_cell
+                            .and_then(|fig| Some(fig == (rank, file)))
+                            .unwrap_or(false);
+                        let btn = ui.add(
+                            btn.frame(false)
+                                .min_size(Vec2::new(self.cell_size, self.cell_size))
+                                .fill(background_color(
+                                    (rank, file),
+                                    selected,
+                                    self.moves
+                                        .as_ref()
+                                        .and_then(|moves| {
+                                            moves.iter().find(|_move| {
+                                                _move.to == (rank as u32, file as u32)
+                                            })
+                                        })
+                                        .is_some(),
+                                )),
+                        );
+                        if btn.clicked() {
                             println!("Position {}-{} was clicked", rank, file);
                             println!("Cell: {:?}", cell);
                             self.moves = if let Some(moves) = self.moves.as_mut() {
@@ -162,55 +150,5 @@ impl App {
                 }
             });
         move_to_exec
-    }
-}
-
-fn background_color(
-    position: (usize, usize),
-    selected: bool,
-    possible_move: bool,
-) -> egui::Color32 {
-    let color = if (position.0 + position.1) % 2 == 0 {
-        egui::Color32::LIGHT_GRAY
-    } else {
-        egui::Color32::DARK_GRAY
-    };
-    if selected {
-        egui::Color32::LIGHT_GREEN
-    } else if possible_move {
-        color.additive().gamma_multiply(1.3)
-    } else {
-        color
-    }
-}
-
-fn piece_image(cell: &Cell) -> Option<egui::ImageSource<'static>> {
-    use Color::*;
-    use PieceType::*;
-    match cell {
-        Cell::Figure(figure) => match figure.color {
-            Black => match figure.kind {
-                Pawn => Some(egui::include_image!("../media/Chess_pdt45.svg.png")),
-                Knight => Some(egui::include_image!("../media/Chess_ndt45.svg.png")),
-                Bishop => Some(egui::include_image!("../media/Chess_bdt45.svg.png")),
-                Rook => Some(egui::include_image!("../media/Chess_rdt45.svg.png")),
-                Queen => Some(egui::include_image!("../media/Chess_qdt45.svg.png")),
-                King => Some(egui::include_image!("../media/Chess_kdt45.svg.png")),
-                Invalid => Some(egui::include_image!("../media/Chess_idt45.svg.png")),
-                EmptySquare => None,
-            },
-            White => match figure.kind {
-                Pawn => Some(egui::include_image!("../media/Chess_plt45.svg.png")),
-                Knight => Some(egui::include_image!("../media/Chess_nlt45.svg.png")),
-                Bishop => Some(egui::include_image!("../media/Chess_blt45.svg.png")),
-                Rook => Some(egui::include_image!("../media/Chess_rlt45.svg.png")),
-                Queen => Some(egui::include_image!("../media/Chess_qlt45.svg.png")),
-                King => Some(egui::include_image!("../media/Chess_klt45.svg.png")),
-                Invalid => Some(egui::include_image!("../media/Chess_ilt45.svg.png")),
-                EmptySquare => None,
-            },
-        },
-        Cell::Unknown => None,
-        Cell::Empty => None,
     }
 }

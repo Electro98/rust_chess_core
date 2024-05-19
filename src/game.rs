@@ -35,6 +35,7 @@ impl DefaultMove {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Game {
     board: Board,
     current_player: Color,
@@ -48,7 +49,7 @@ impl Game {
         Game::with_player(board, Color::White)
     }
 
-    fn with_player(board: Board, player: Color) -> Game {
+    pub fn with_player(board: Board, player: Color) -> Game {
         #[cfg(debug_assertions)]
         {
             let check_possibility = board.is_checked(player.opposite());
@@ -129,6 +130,26 @@ impl Game {
     pub fn vision_board(&self, player: Color) -> Board {
         self.board.clone()
     }
+
+    pub fn cell(&self, file: usize, rank: usize) -> Option<Cell> {
+        if file < 8 && rank < 8 {
+            let pos = (rank << 4) as u8 + file as u8;
+            let piece = Piece::from_code(self.board.inside()[pos as usize], pos);
+            Some(if piece.type_() == PieceType::EmptySquare {
+                Cell::Empty
+            } else {
+                Cell::Figure(Figure {
+                    kind: piece.type_(),
+                    color: piece.color(),
+                    last_move: false,
+                    impose_check: false,
+                    can_move: true,
+                })
+            })
+        } else {
+            None
+        }
+    }
 }
 
 impl Default for Game {
@@ -168,7 +189,7 @@ impl MatchInterface<ImplMove> for Game {
         }
         let pos = (rank << 4) as u8 | file as u8;
         let piece = Piece::from_code(self.board.inside()[pos as usize], pos);
-        println!("Piece: {:?}", piece);
+        // println!("Piece: {:?}", piece);
         if piece.type_() == PieceType::EmptySquare || piece.color() != self.current_player {
             return None;
         }

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use chess_engine::{engine::Board, Color, DefaultMove, Game, MatchInterface};
+use crate::{engine::Board, Color, DefaultMove, Game, MatchInterface};
 use postcard::{from_bytes, to_allocvec};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::UnboundedSender;
@@ -30,13 +30,13 @@ pub struct OnlineGame {
 
 pub type Rooms = Arc<RwLock<HashMap<GameId, OnlineGame>>>;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum ClientMessage {
     OpponentConnected,
     OpponentDisconected,
     GameCanceled,
     GameFinished(Color),
-    GameStateSync(Board, Color),
+    GameStateSync(Board, Color, Color, bool),
     NewTurn(Color),
     MakeMove(DefaultMove),
 }
@@ -60,6 +60,11 @@ impl OnlineGame {
 impl Into<Message> for ClientMessage {
     fn into(self) -> Message {
         Message::binary(to_allocvec(&self).unwrap())
+    }
+}
+impl Into<tungstenite::Message> for ClientMessage {
+    fn into(self) -> tungstenite::Message {
+        tungstenite::Message::binary(to_allocvec(&self).unwrap())
     }
 }
 
