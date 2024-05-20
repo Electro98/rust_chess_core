@@ -27,7 +27,7 @@ pub async fn client_connection(ws: WebSocket, rooms: Rooms, room_name: Option<St
         // Adding new client to game
         let mut rooms = rooms.write().await;
         let client = Client {
-            id: id.clone(),
+            id,
             sender: client_sender,
             game_id: room_name.clone(),
         };
@@ -120,7 +120,7 @@ pub async fn client_connection(ws: WebSocket, rooms: Rooms, room_name: Option<St
     trc!("Client {} was disconnected...", id);
 }
 
-async fn client_msg(msg: Message, rooms: &Rooms, room: &GameId, client_id: Uuid, player: Color) {
+async fn client_msg(msg: Message, rooms: &Rooms, room: &GameId, _client_id: Uuid, player: Color) {
     trc!("Received message from room '{}': {:?}", room, msg);
     if !msg.is_binary() {
         // TODO: do something

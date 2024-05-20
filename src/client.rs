@@ -135,43 +135,43 @@ impl Connecting {
     }
 }
 
-impl Into<MoveValidation> for PlayerMove {
-    fn into(self) -> MoveValidation {
+impl From<PlayerMove> for MoveValidation {
+    fn from(val: PlayerMove) -> Self {
         MoveValidation {
-            client_thread: self.client_thread,
-            game: self.game,
+            client_thread: val.client_thread,
+            game: val.game,
         }
     }
 }
 
-impl Into<OnlineMatchState> for Unconnected {
-    fn into(self) -> OnlineMatchState {
-        OnlineMatchState::Unconnected(self)
+impl From<Unconnected> for OnlineMatchState {
+    fn from(val: Unconnected) -> Self {
+        OnlineMatchState::Unconnected(val)
     }
 }
-impl Into<OnlineMatchState> for Connecting {
-    fn into(self) -> OnlineMatchState {
-        OnlineMatchState::Connecting(self)
+impl From<Connecting> for OnlineMatchState {
+    fn from(val: Connecting) -> Self {
+        OnlineMatchState::Connecting(val)
     }
 }
-impl Into<OnlineMatchState> for WaitingOpponent {
-    fn into(self) -> OnlineMatchState {
-        OnlineMatchState::WaitingOpponent(self)
+impl From<WaitingOpponent> for OnlineMatchState {
+    fn from(val: WaitingOpponent) -> Self {
+        OnlineMatchState::WaitingOpponent(val)
     }
 }
-impl Into<OnlineMatchState> for PlayerMove {
-    fn into(self) -> OnlineMatchState {
-        OnlineMatchState::PlayerMove(self)
+impl From<PlayerMove> for OnlineMatchState {
+    fn from(val: PlayerMove) -> Self {
+        OnlineMatchState::PlayerMove(val)
     }
 }
-impl Into<OnlineMatchState> for OpponentMove {
-    fn into(self) -> OnlineMatchState {
-        OnlineMatchState::OpponentMove(self)
+impl From<OpponentMove> for OnlineMatchState {
+    fn from(val: OpponentMove) -> Self {
+        OnlineMatchState::OpponentMove(val)
     }
 }
-impl Into<OnlineMatchState> for Canceled {
-    fn into(self) -> OnlineMatchState {
-        OnlineMatchState::Canceled(self)
+impl From<Canceled> for OnlineMatchState {
+    fn from(val: Canceled) -> Self {
+        OnlineMatchState::Canceled(val)
     }
 }
 
@@ -228,17 +228,15 @@ impl OnlineClient {
     }
     fn send_move(&self, _move: DefaultMove) -> Result<bool, SendError<ClientMessage>> {
         let state = &*self.online_match.lock().unwrap();
-        match state {
-            OnlineMatchState::PlayerMove(_) => self
-                .tx
+        if let OnlineMatchState::PlayerMove(_) = state {
+            self.tx
                 .as_ref()
                 .expect("Sender is not initialized, but waiting for player to move?!")
                 .send(ClientMessage::MakeMove(_move))
-                .and_then(|_| Ok(true)),
-            _ => {
-                wrn!("Client want to send move in incorrect state: {:?}", state);
-                Ok(false)
-            }
+                .map(|_| true)
+        } else {
+            wrn!("Client want to send move in incorrect state: {:?}", state);
+            Ok(false)
         }
     }
     fn get_game(&self) -> Option<Game> {
@@ -353,17 +351,16 @@ async fn game_client(
             }
         };
         if let Some(player_msg) = player_msg {
-            match client_write.send(Ok(player_msg.into())) {
-                Ok(_) => {
-                    let state = &mut *match_state.lock().unwrap();
-                    let old_state = std::mem::replace(state, OnlineMatchState::InvalidDummy);
-                    *state = if let OnlineMatchState::PlayerMove(player_move) = old_state {
-                        OnlineMatchState::MoveValidation(player_move.into())
-                    } else {
-                        unreachable!("That's a bug.")
-                    }
+            if client_write.send(Ok(player_msg.into())).is_ok() {
+                let state = &mut *match_state.lock().unwrap();
+                let old_state = std::mem::replace(state, OnlineMatchState::InvalidDummy);
+                *state = if let OnlineMatchState::PlayerMove(player_move) = old_state {
+                    OnlineMatchState::MoveValidation(player_move.into())
+                } else {
+                    unreachable!("That's a bug.")
                 }
-                Err(_) => {}
+            } else {
+                // Well, ok
             }
         }
         let msg = match timeout(Duration::from_millis(10), client_read.try_next()).await {
@@ -425,10 +422,10 @@ fn main() -> Result<(), eframe::Error> {
 }
 
 enum ScreenData {
-    ConnectScreen,
-    GameScreen(Game, bool),
-    WaitScreen(String),
-    ErrorScreen(Option<String>),
+    ConnectMenu,
+    Game(Game, bool),
+    WaitSomething(String),
+    ErrorOccured(Option<String>),
 }
 
 impl eframe::App for App {
@@ -436,38 +433,38 @@ impl eframe::App for App {
         let screen = {
             let state = self.client.online_match.lock().unwrap();
             match &*state {
-                OnlineMatchState::Unconnected(_) => ScreenData::ConnectScreen,
-                OnlineMatchState::Connecting(_) => ScreenData::WaitScreen("Connecting".into()),
+                OnlineMatchState::Unconnected(_) => ScreenData::ConnectMenu,
+                OnlineMatchState::Connecting(_) => ScreenData::WaitSomething("Connecting".into()),
                 OnlineMatchState::WaitingOpponent(_) => {
-                    ScreenData::WaitScreen("Opponent is not connected".into())
+                    ScreenData::WaitSomething("Opponent is not connected".into())
                 }
                 OnlineMatchState::PlayerMove(state) => {
-                    ScreenData::GameScreen(state.game.clone(), true)
+                    ScreenData::Game(state.game.clone(), true)
                 }
                 OnlineMatchState::OpponentMove(state) => {
-                    ScreenData::GameScreen(state.game.clone(), false)
+                    ScreenData::Game(state.game.clone(), false)
                 }
                 OnlineMatchState::MoveValidation(_) => {
-                    ScreenData::WaitScreen("Move is validating".into())
+                    ScreenData::WaitSomething("Move is validating".into())
                 }
-                OnlineMatchState::Finished(fin) => ScreenData::ErrorScreen(Some(format!(
+                OnlineMatchState::Finished(fin) => ScreenData::ErrorOccured(Some(format!(
                     "Game finished, winner: {:?}",
                     fin.winner
                 ))),
                 OnlineMatchState::Canceled(canceled) => {
-                    ScreenData::ErrorScreen(canceled.reason.clone().into())
+                    ScreenData::ErrorOccured(canceled.reason.clone().into())
                 }
                 OnlineMatchState::InvalidDummy => todo!(),
             }
         };
         match screen {
-            ScreenData::ConnectScreen => {
+            ScreenData::ConnectMenu => {
                 let url = self.connect_screen(ctx, frame);
                 if let Some(url) = url {
                     self.client.connect(url);
                 }
             }
-            ScreenData::GameScreen(game, current_player) => {
+            ScreenData::Game(game, current_player) => {
                 let _move = self.game_screen(ctx, frame, game);
                 if current_player {
                     // Nothing
@@ -478,14 +475,14 @@ impl eframe::App for App {
                     let _ = self.client.send_move(_move);
                 }
             }
-            ScreenData::WaitScreen(text) => self.wait_screen(ctx, frame, text),
-            ScreenData::ErrorScreen(reason) => self.error_screen(ctx, frame, reason),
+            ScreenData::WaitSomething(text) => self.wait_screen(ctx, frame, text),
+            ScreenData::ErrorOccured(reason) => self.error_screen(ctx, frame, reason),
         }
     }
 }
 
 impl App {
-    fn connect_screen(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) -> Option<Url> {
+    fn connect_screen(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) -> Option<Url> {
         let mut url = None;
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.label("Hello!");
@@ -505,7 +502,7 @@ impl App {
                 } else {
                     format!("ws://127.0.0.1:3030/ws/{}", text)
                 };
-                url = Url::parse(&text).and_then(|x| Ok(Some(x))).unwrap_or(None);
+                url = Url::parse(&text).map(Some).unwrap_or(None);
             }
         });
         url
@@ -526,9 +523,7 @@ impl App {
             trc!("Clicked: {:?}", new_click);
         }
         if let SavedData::ChosenFigure((rank, file)) = &self.saved_data {
-            if new_click.is_none() {
-                return None;
-            }
+            new_click?;
             match game
                 .cell(*file, *rank)
                 .expect("Invalid file and/or rank, bug")
@@ -539,9 +534,7 @@ impl App {
                         .and_then(|moves| {
                             moves
                                 .into_iter()
-                                .into_iter()
                                 .find(|_move| _move.to == new_click.unwrap())
-                                .and_then(|_move| Some(_move))
                         });
                     if _move.is_none() {
                         self.saved_data = SavedData::None;
@@ -561,7 +554,7 @@ impl App {
         }
     }
 
-    fn wait_screen(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame, text: String) {
+    fn wait_screen(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame, text: String) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.label(text);
         });
@@ -570,7 +563,7 @@ impl App {
     fn error_screen(
         &mut self,
         ctx: &egui::Context,
-        frame: &mut eframe::Frame,
+        _frame: &mut eframe::Frame,
         reason: Option<String>,
     ) {
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -586,7 +579,7 @@ impl App {
     fn grid(
         &mut self,
         ui: &mut egui::Ui,
-        frame: &mut eframe::Frame,
+        _frame: &mut eframe::Frame,
         game: &Game,
     ) -> Option<(u32, u32)> {
         let chosen_figure = if let SavedData::ChosenFigure(fig) = &self.saved_data {
@@ -613,7 +606,7 @@ impl App {
                             egui::Button::new("")
                         };
                         let selected = chosen_figure
-                            .and_then(|fig| Some(fig == &(rank, file)))
+                            .map(|fig| fig == &(rank, file))
                             .unwrap_or(false);
                         let btn = ui.add(
                             btn.frame(false)

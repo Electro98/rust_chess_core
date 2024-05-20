@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::{engine::Board, Color, DefaultMove, Game, MatchInterface};
+use crate::{engine::Board, Color, DefaultMove, Game};
 use postcard::{from_bytes, to_allocvec};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::UnboundedSender;
@@ -57,14 +57,14 @@ impl OnlineGame {
     }
 }
 
-impl Into<Message> for ClientMessage {
-    fn into(self) -> Message {
-        Message::binary(to_allocvec(&self).unwrap())
+impl From<ClientMessage> for warp::ws::Message {
+    fn from(value: ClientMessage) -> Self {
+        Self::binary(to_allocvec(&value).unwrap())
     }
 }
-impl Into<tungstenite::Message> for ClientMessage {
-    fn into(self) -> tungstenite::Message {
-        tungstenite::Message::binary(to_allocvec(&self).unwrap())
+impl From<ClientMessage> for tungstenite::Message {
+    fn from(value: ClientMessage) -> Self {
+        Self::binary(to_allocvec(&value).unwrap())
     }
 }
 

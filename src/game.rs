@@ -94,13 +94,13 @@ impl Game {
             .collect();
         self.finished = moves.is_empty();
         self.board.castling_rights(king);
-        return GameState::PlayerMove(self.current_player);
+        GameState::PlayerMove(self.current_player)
     }
 
     pub fn last_move(&self) -> Option<ImplMove> {
         self.history
             .last()
-            .and_then(|_move| Some(_move._move.clone()))
+            .map(|_move| _move._move.clone())
     }
 
     pub fn make_random_move(&mut self) -> GameState {
@@ -120,14 +120,14 @@ impl Game {
 
         if let Some(_move) = chosen_move {
             let wrapped_move = DefaultMove::from_move(_move);
-            return self.execute_move(wrapped_move);
+            self.execute_move(wrapped_move)
         } else {
             self.finished = true;
-            return GameState::Finished;
+            GameState::Finished
         }
     }
 
-    pub fn vision_board(&self, player: Color) -> Board {
+    pub fn vision_board(&self, _player: Color) -> Board {
         self.board.clone()
     }
 
@@ -204,11 +204,11 @@ impl MatchInterface<ImplMove> for Game {
             .filter(|_move| {
                 _move
                     .piece()
-                    .and_then(|move_piece| Some(move_piece == &piece))
+                    .map(|move_piece| move_piece == &piece)
                     .unwrap_or(false)
             })
             .filter(|impl_move| is_move_valid(impl_move, &self.board, self.current_player))
-            .map(|_move| DefaultMove::from_move(_move))
+            .map(DefaultMove::from_move)
             .collect();
         if moves.is_empty() {
             None

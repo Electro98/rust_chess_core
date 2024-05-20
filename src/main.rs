@@ -1,5 +1,4 @@
-use chess_engine::engine::Move as ImplMove;
-use chess_engine::{Cell, Color, DefaultMove, Figure, Game, MatchInterface, PieceType};
+use chess_engine::{Cell, Color, DefaultMove, Figure, Game, MatchInterface};
 use eframe::{egui, epaint::Vec2};
 use gui::{background_color, piece_image};
 
@@ -80,9 +79,8 @@ impl App {
             .max_col_width(self.cell_size)
             .min_row_height(self.cell_size)
             .show(ui, |ui| {
-                for rank in 0..8 {
-                    for file in 0..8 {
-                        let cell = &board[rank][file];
+                for (rank, row) in board.iter().enumerate() {
+                    for (file, cell) in row.iter().enumerate() {
                         let btn = if let Some(source) = piece_image(cell) {
                             egui::Button::image(source)
                         } else {
@@ -90,7 +88,7 @@ impl App {
                         };
                         let selected = self
                             .selected_cell
-                            .and_then(|fig| Some(fig == (rank, file)))
+                            .map(|fig| fig == (rank, file))
                             .unwrap_or(false);
                         let btn = ui.add(
                             btn.frame(false)
@@ -120,9 +118,9 @@ impl App {
                                     }
                                     _ => {
                                         move_to_exec = moves
-                                            .into_iter()
+                                            .iter()
                                             .find(|_move| _move.to == (rank as u32, file as u32))
-                                            .and_then(|_move| Some(_move.clone()));
+                                            .cloned();
                                         self.chosen_figure = None;
                                         self.selected_cell = None;
                                         None

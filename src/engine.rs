@@ -1,8 +1,9 @@
 #![allow(dead_code)]
 
+
 use std::{fmt::Debug, iter::zip};
 
-use log::{debug, trace};
+use log::trace;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, Bytes};
 
@@ -64,11 +65,7 @@ impl Move {
 
 impl ImplicitMove for Move {
     fn promotion(&self) -> bool {
-        match self {
-            Move::PromotionQuiet(_, _, _) => true,
-            Move::PromotionCapture(_, _, _) => true,
-            _ => false,
-        }
+        matches!(self, Move::PromotionQuiet(..) | Move::PromotionCapture(..))
     }
 
     fn set_promotion_type(&mut self, king: PieceType) {
@@ -736,9 +733,10 @@ impl Debug for Piece {
     }
 }
 
-#[derive(PartialEq, Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(PartialEq, Debug, Default, Clone, Copy, Serialize, Deserialize)]
 pub enum Color {
     Black = 0x00,
+    #[default]
     White = 0x80,
 }
 
@@ -757,21 +755,15 @@ impl Color {
     }
 }
 
-impl Default for Color {
-    fn default() -> Self {
-        Color::White
-    }
-}
-
 impl From<u8> for Color {
     fn from(value: u8) -> Self {
         Color::from_byte(value)
     }
 }
 
-impl Into<u8> for Color {
-    fn into(self) -> u8 {
-        self as u8
+impl From<Color> for u8 {
+    fn from(value: Color) -> Self {
+        value as u8
     }
 }
 
@@ -800,8 +792,8 @@ impl From<u8> for PieceType {
     }
 }
 
-impl Into<u8> for PieceType {
-    fn into(self) -> u8 {
-        self as u8
+impl From<PieceType> for u8 {
+    fn from(value: PieceType) -> Self {
+        value as u8
     }
 }
