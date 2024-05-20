@@ -61,7 +61,7 @@ impl Game {
         let (checked, _) = board.is_checked(player).expect("Board must be valid!");
         Game {
             board,
-            current_player: Color::White,
+            current_player: player,
             history: Vec::new(),
             checked,
             finished: false,

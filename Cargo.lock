@@ -735,6 +735,7 @@ dependencies = [
  "serde_with",
  "tokio",
  "tokio-stream",
+ "tokio-tungstenite",
  "tungstenite",
  "url",
  "uuid",

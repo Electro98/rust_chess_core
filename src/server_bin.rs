@@ -23,7 +23,7 @@ async fn main() {
         .and_then(existing_room_handler);
 
     let routes = hello.or(existing_room).or(new_room);
-    warp::serve(routes).run(([127, 0, 0, 1], 3030)).await;
+    warp::serve(routes).run(([0, 0, 0, 0], 3030)).await;
 }
 
 fn with<T>(value: T) -> impl Filter<Extract = (T,), Error = std::convert::Infallible> + Clone

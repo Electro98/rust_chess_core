@@ -1,22 +1,20 @@
 use std::{
-    borrow::BorrowMut,
-    env::current_exe,
     sync::{
         mpsc::{self, SendError},
-        Arc, Mutex, MutexGuard,
+        Arc, Mutex,
     },
+    thread::JoinHandle,
     time::Duration,
 };
 
-use chess_engine::{
-    engine::Move as ImplMove, Cell as FieldCell, Color, DefaultMove, Game, GameState,
-    MatchInterface,
-};
-use chess_engine::{server::definitions::ClientMessage, Figure};
+use chess_engine::server::definitions::ClientMessage;
+use chess_engine::{engine::Board, Cell as FieldCell, Color, DefaultMove, Game, MatchInterface};
 use eframe::egui::{self, Vec2};
+use futures::{FutureExt, StreamExt};
 use gui::{background_color, piece_image};
 use postcard::from_bytes;
-use tungstenite::{stream::NoDelay, Message};
+use tokio::time::timeout;
+use tungstenite::Message;
 use url::Url;
 
 mod gui;
@@ -69,7 +67,11 @@ impl Unconnected {
     ) -> Connecting {
         Connecting {
             client_thread: std::thread::spawn(move || {
-                let result = game_client(url, &online_match, tx);
+                let result = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .unwrap()
+                    .block_on(game_client(url, &online_match, tx));
                 if let Err(err) = result {
                     let final_state = match err {
                         tungstenite::Error::ConnectionClosed => {
@@ -129,6 +131,15 @@ impl Connecting {
                 }
             }
             _ => todo!("Got unexpected first message!"),
+        }
+    }
+}
+
+impl Into<MoveValidation> for PlayerMove {
+    fn into(self) -> MoveValidation {
+        MoveValidation {
+            client_thread: self.client_thread,
+            game: self.game,
         }
     }
 }
@@ -227,7 +238,7 @@ impl OnlineClient {
             _ => {
                 wrn!("Client want to send move in incorrect state: {:?}", state);
                 Ok(false)
-            },
+            }
         }
     }
     fn get_game(&self) -> Option<Game> {
@@ -242,6 +253,31 @@ impl OnlineClient {
 }
 
 fn message_received(state: OnlineMatchState, msg: ClientMessage) -> OnlineMatchState {
+    fn sync_state(
+        client_thread: JoinHandle<()>,
+        sync_msg: (Board, Color, Color, bool),
+    ) -> OnlineMatchState {
+        let (board, current_player, you, opponent_connected) = sync_msg;
+        debg!("Current player: {:?} I'm am {:?}", current_player, you);
+        let game = Game::with_player(board, current_player);
+        match (current_player == you, opponent_connected) {
+            (false, true) => OpponentMove {
+                client_thread,
+                game,
+            }
+            .into(),
+            (false, false) => WaitingOpponent {
+                client_thread,
+                game,
+            }
+            .into(),
+            _ => PlayerMove {
+                client_thread,
+                game,
+            }
+            .into(),
+        }
+    }
     match (state, msg) {
         (OnlineMatchState::Connecting(_), ClientMessage::GameCanceled) => todo!(),
         (OnlineMatchState::WaitingOpponent(_), ClientMessage::OpponentConnected) => todo!(),
@@ -249,25 +285,47 @@ fn message_received(state: OnlineMatchState, msg: ClientMessage) -> OnlineMatchS
         (OnlineMatchState::OpponentMove(_), ClientMessage::OpponentDisconected) => todo!(),
         (OnlineMatchState::OpponentMove(_), ClientMessage::GameCanceled) => todo!(),
         (OnlineMatchState::OpponentMove(_), ClientMessage::GameFinished(_)) => todo!(),
-        (OnlineMatchState::OpponentMove(_), ClientMessage::GameStateSync(_, _, _, _)) => todo!(),
         (OnlineMatchState::MoveValidation(_), ClientMessage::GameCanceled) => todo!(),
-        (OnlineMatchState::MoveValidation(_), ClientMessage::GameStateSync(_, _, _, _)) => todo!(),
+        (
+            OnlineMatchState::OpponentMove(opponent_move),
+            ClientMessage::GameStateSync(board, current_player, you, opponent_connected),
+        ) => sync_state(
+            opponent_move.client_thread,
+            (board, current_player, you, opponent_connected),
+        ),
+        (
+            OnlineMatchState::MoveValidation(move_validation),
+            ClientMessage::GameStateSync(board, current_player, you, opponent_connected),
+        ) => sync_state(
+            move_validation.client_thread,
+            (board, current_player, you, opponent_connected),
+        ),
         (state, msg) => {
             wrn!("Invalid combination of message and state!");
-            wrn!("Msg: {:#?} State {:#?}", &state, msg);
+            wrn!("State: {:?}\nMsg: {:?}", &state, msg);
             state
         }
     }
 }
 
-fn game_client(
+async fn game_client(
     url: Url,
     match_state: &Arc<Mutex<OnlineMatchState>>,
     tx: mpsc::Receiver<ClientMessage>,
 ) -> Result<(), tungstenite::Error> {
-    let (mut socket, response) = tungstenite::connect(url)?;
+    use tokio_stream::StreamExt;
+    let (socket, _) = tokio_tungstenite::connect_async(url).await?;
 
-    let initial_message = socket.read()?;
+    let (client_write, ws_sender) = tokio::sync::mpsc::unbounded_channel();
+    let (write_sink, mut client_read) = socket.split();
+    let ws_sender = tokio_stream::wrappers::UnboundedReceiverStream::new(ws_sender);
+    tokio::task::spawn(ws_sender.forward(write_sink).map(|res| {
+        if let Err(e) = res {
+            err!("Failed sending websocket msg: {}", e);
+        }
+    }));
+
+    let initial_message = client_read.try_next().await?.unwrap();
 
     if let Message::Binary(bytes) = initial_message {
         let state = &mut *match_state.lock().unwrap();
@@ -276,12 +334,10 @@ fn game_client(
         let connecting = if let OnlineMatchState::Connecting(val) = old_value {
             val
         } else {
-            todo!()
+            unreachable!("Pretty sure, that's a bug")
         };
         *state = connecting.first_msg(bytes);
     }
-
-    socket.split();
 
     loop {
         let player_msg = {
@@ -297,9 +353,23 @@ fn game_client(
             }
         };
         if let Some(player_msg) = player_msg {
-            let _ = socket.write(player_msg.into());
+            match client_write.send(Ok(player_msg.into())) {
+                Ok(_) => {
+                    let state = &mut *match_state.lock().unwrap();
+                    let old_state = std::mem::replace(state, OnlineMatchState::InvalidDummy);
+                    *state = if let OnlineMatchState::PlayerMove(player_move) = old_state {
+                        OnlineMatchState::MoveValidation(player_move.into())
+                    } else {
+                        unreachable!("That's a bug.")
+                    }
+                }
+                Err(_) => {}
+            }
         }
-        let msg = socket.read()?;
+        let msg = match timeout(Duration::from_millis(10), client_read.try_next()).await {
+            Ok(msg) => msg?.unwrap(),
+            Err(_) => continue,
+        };
         trc!("Received server msg: {}", msg);
         let msg = if let Message::Binary(bytes) = msg {
             from_bytes(bytes.as_slice())
@@ -356,7 +426,7 @@ fn main() -> Result<(), eframe::Error> {
 
 enum ScreenData {
     ConnectScreen,
-    GameScreen(Game),
+    GameScreen(Game, bool),
     WaitScreen(String),
     ErrorScreen(Option<String>),
 }
@@ -371,8 +441,12 @@ impl eframe::App for App {
                 OnlineMatchState::WaitingOpponent(_) => {
                     ScreenData::WaitScreen("Opponent is not connected".into())
                 }
-                OnlineMatchState::PlayerMove(state) => ScreenData::GameScreen(state.game.clone()),
-                OnlineMatchState::OpponentMove(state) => ScreenData::GameScreen(state.game.clone()),
+                OnlineMatchState::PlayerMove(state) => {
+                    ScreenData::GameScreen(state.game.clone(), true)
+                }
+                OnlineMatchState::OpponentMove(state) => {
+                    ScreenData::GameScreen(state.game.clone(), false)
+                }
                 OnlineMatchState::MoveValidation(_) => {
                     ScreenData::WaitScreen("Move is validating".into())
                 }
@@ -393,8 +467,11 @@ impl eframe::App for App {
                     self.client.connect(url);
                 }
             }
-            ScreenData::GameScreen(game) => {
+            ScreenData::GameScreen(game, current_player) => {
                 let _move = self.game_screen(ctx, frame, game);
+                if current_player {
+                    // Nothing
+                }
                 if let Some(_move) = _move {
                     trc!("Sending move: {:?}", _move);
                     self.saved_data = SavedData::None;
@@ -457,7 +534,8 @@ impl App {
                 .expect("Invalid file and/or rank, bug")
             {
                 FieldCell::Figure(_) => {
-                    let _move = game.possible_moves(*rank as u32, *file as u32)
+                    let _move = game
+                        .possible_moves(*rank as u32, *file as u32)
                         .and_then(|moves| {
                             moves
                                 .into_iter()
