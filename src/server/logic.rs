@@ -73,6 +73,10 @@ pub async fn client_connection(ws: WebSocket, rooms: Rooms, room_name: Option<St
                 host.is_some(),
             ),
         );
+        send_message(
+            new_client.unwrap(),
+            Message::text(format!("Room: {}", room_name)),
+        );
         if let Some(host) = host {
             send_message(host, ClientMessage::OpponentConnected);
         }

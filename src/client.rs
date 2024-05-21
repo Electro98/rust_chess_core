@@ -279,11 +279,20 @@ fn message_received(state: OnlineMatchState, msg: ClientMessage) -> OnlineMatchS
     match (state, msg) {
         (OnlineMatchState::Connecting(_), ClientMessage::GameCanceled) => todo!(),
         (OnlineMatchState::WaitingOpponent(_), ClientMessage::OpponentConnected) => todo!(),
-        (OnlineMatchState::PlayerMove(_), ClientMessage::GameCanceled) => todo!(),
         (OnlineMatchState::OpponentMove(_), ClientMessage::OpponentDisconected) => todo!(),
-        (OnlineMatchState::OpponentMove(_), ClientMessage::GameCanceled) => todo!(),
         (OnlineMatchState::OpponentMove(_), ClientMessage::GameFinished(_)) => todo!(),
-        (OnlineMatchState::MoveValidation(_), ClientMessage::GameCanceled) => todo!(),
+        (OnlineMatchState::PlayerMove(_), ClientMessage::GameCanceled) => Canceled {
+            reason: "Game canceled by server".to_string(),
+        }
+        .into(),
+        (OnlineMatchState::OpponentMove(_), ClientMessage::GameCanceled) => Canceled {
+            reason: "Game canceled by server".to_string(),
+        }
+        .into(),
+        (OnlineMatchState::MoveValidation(_), ClientMessage::GameCanceled) => Canceled {
+            reason: "Game canceled by server".to_string(),
+        }
+        .into(),
         (
             OnlineMatchState::OpponentMove(opponent_move),
             ClientMessage::GameStateSync(board, current_player, you, opponent_connected),
@@ -370,6 +379,9 @@ async fn game_client(
         trc!("Received server msg: {}", msg);
         let msg = if let Message::Binary(bytes) = msg {
             from_bytes(bytes.as_slice())
+        } else if let Message::Text(text) = msg {
+            debg!("Server msg: {}", text);
+            continue;
         } else {
             todo!("Unexpected type of message received!")
         }
@@ -377,6 +389,14 @@ async fn game_client(
         let state = &mut *match_state.lock().unwrap();
         let old_state = std::mem::replace(state, OnlineMatchState::InvalidDummy);
         *state = message_received(old_state, msg);
+        if matches!(
+            state,
+            OnlineMatchState::Canceled(..)
+                | OnlineMatchState::Finished(..)
+                | OnlineMatchState::Unconnected(..)
+        ) {
+            break;
+        }
     }
 
     Ok(())
@@ -438,9 +458,7 @@ impl eframe::App for App {
                 OnlineMatchState::WaitingOpponent(_) => {
                     ScreenData::WaitSomething("Opponent is not connected".into())
                 }
-                OnlineMatchState::PlayerMove(state) => {
-                    ScreenData::Game(state.game.clone(), true)
-                }
+                OnlineMatchState::PlayerMove(state) => ScreenData::Game(state.game.clone(), true),
                 OnlineMatchState::OpponentMove(state) => {
                     ScreenData::Game(state.game.clone(), false)
                 }
@@ -465,7 +483,7 @@ impl eframe::App for App {
                 }
             }
             ScreenData::Game(game, current_player) => {
-                let _move = self.game_screen(ctx, frame, game);
+                let _move = self.game_screen(ctx, frame, game, current_player);
                 if current_player {
                     // Nothing
                 }
@@ -485,25 +503,33 @@ impl App {
     fn connect_screen(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) -> Option<Url> {
         let mut url = None;
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.label("Hello!");
-            if !matches!(&self.saved_data, SavedData::InputText(..)) {
-                self.saved_data = SavedData::InputText(String::new())
-            }
-            let text = if let SavedData::InputText(text) = &mut self.saved_data {
-                text
-            } else {
-                panic!("Hmm")
-            };
-            ui.text_edit_singleline(text);
-            let resp = ui.button("Connect!");
-            if resp.clicked() {
-                let text: String = if text.is_empty() {
-                    "ws://127.0.0.1:3030/ws".to_string()
+            ui.vertical_centered(|ui| {
+                let mut max_rect = ui.max_rect();
+                max_rect.set_width(max_rect.width() * 0.5);
+                ui.set_max_width(max_rect.width());
+                ui.heading("Connect to game");
+                if !matches!(&self.saved_data, SavedData::InputText(..)) {
+                    self.saved_data = SavedData::InputText(String::new())
+                }
+                let text = if let SavedData::InputText(text) = &mut self.saved_data {
+                    text
                 } else {
-                    format!("ws://127.0.0.1:3030/ws/{}", text)
+                    panic!("Hmm")
                 };
-                url = Url::parse(&text).map(Some).unwrap_or(None);
-            }
+                ui.columns(2, |ui| {
+                    ui[0].label("Room:");
+                    ui[1].text_edit_singleline(text);
+                });
+                let resp = ui.button("Connect!");
+                if resp.clicked() {
+                    let text: String = if text.is_empty() {
+                        "ws://127.0.0.1:3030/ws".to_string()
+                    } else {
+                        format!("ws://127.0.0.1:3030/ws/{}", text)
+                    };
+                    url = Url::parse(&text).map(Some).unwrap_or(None);
+                }
+            });
         });
         url
     }
@@ -513,11 +539,26 @@ impl App {
         ctx: &egui::Context,
         frame: &mut eframe::Frame,
         game: Game,
+        current_player: bool,
     ) -> Option<DefaultMove> {
         let mut new_click = None;
+        let player = if current_player {
+            game.current_player()
+        } else {
+            game.current_player().opposite()
+        };
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.label("That's game screen");
-            new_click = self.grid(ui, frame, &game);
+            ui.horizontal_centered(|ui| {
+                ui.vertical(|ui| {
+                    ui.heading("That's game screen");
+                    new_click = self.grid(ui, frame, &game, player);
+                });
+                ui.vertical(|ui| {
+                    // ui.label(format!("Room: ''"));;
+                    ui.label(format!("You are {}", player));
+                    ui.label(format!("Current move: {}", game.current_player()));
+                });
+            });
         });
         if new_click.is_some() {
             trc!("Clicked: {:?}", new_click);
@@ -556,7 +597,9 @@ impl App {
 
     fn wait_screen(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame, text: String) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.label(text);
+            ui.centered_and_justified(|ui| {
+                ui.heading(text);
+            });
         });
     }
 
@@ -567,12 +610,16 @@ impl App {
         reason: Option<String>,
     ) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            if let Some(text) = reason {
-                ui.label("Here is something happen, check it out!");
-                ui.label(text);
-            } else {
-                ui.label("Something went terribly wrong!");
-            }
+            ui.centered_and_justified(|ui| {
+                ui.vertical_centered(|ui| {
+                    if let Some(text) = reason {
+                        ui.heading("Here is something happen, check it out!");
+                        ui.label(text);
+                    } else {
+                        ui.heading("Something went terribly wrong!");
+                    }
+                })
+            });
         });
     }
 
@@ -581,6 +628,7 @@ impl App {
         ui: &mut egui::Ui,
         _frame: &mut eframe::Frame,
         game: &Game,
+        _player: Color,
     ) -> Option<(u32, u32)> {
         let chosen_figure = if let SavedData::ChosenFigure(fig) = &self.saved_data {
             Some(fig)
@@ -590,7 +638,8 @@ impl App {
         let possible_moves =
             chosen_figure.and_then(|(rank, file)| game.possible_moves(*rank as u32, *file as u32));
         // trc!("Moves: {:?}", possible_moves);
-        let board = game.current_board();
+        // let board = game.current_board();
+        let board = game.player_board(_player);
         let mut new_click = None;
         egui::Grid::new("main_grid")
             .striped(true)
@@ -622,6 +671,7 @@ impl App {
                                             })
                                         })
                                         .is_some(),
+                                    !matches!(cell, chess_engine::Cell::Unknown),
                                 )),
                         );
                         if btn.clicked() {

@@ -98,9 +98,7 @@ impl Game {
     }
 
     pub fn last_move(&self) -> Option<ImplMove> {
-        self.history
-            .last()
-            .map(|_move| _move._move.clone())
+        self.history.last().map(|_move| _move._move.clone())
     }
 
     pub fn make_random_move(&mut self) -> GameState {
@@ -129,6 +127,7 @@ impl Game {
 
     pub fn vision_board(&self, _player: Color) -> Board {
         self.board.clone()
+        // .obstruct(_player)
     }
 
     pub fn cell(&self, file: usize, rank: usize) -> Option<Cell> {
@@ -149,6 +148,33 @@ impl Game {
         } else {
             None
         }
+    }
+
+    pub fn player_board(&self, player: Color) -> Vec<Vec<Cell>> {
+        let mask = self.board.obstruct_board(player);
+        let mut board = Vec::with_capacity(8);
+        for rank in 0..8u8 {
+            let mut row = Vec::with_capacity(8);
+            for file in 0..8u8 {
+                let pos = (rank << 4) + file;
+                let piece = Piece::from_code(self.board.inside()[pos as usize], pos);
+                row.push(if !mask[file as usize][rank as usize] {
+                    Cell::Unknown
+                } else if piece.type_() == PieceType::EmptySquare {
+                    Cell::Empty
+                } else {
+                    Cell::Figure(Figure {
+                        kind: piece.type_(),
+                        color: piece.color(),
+                        last_move: false,
+                        impose_check: false,
+                        can_move: true,
+                    })
+                });
+            }
+            board.push(row);
+        }
+        board
     }
 }
 

@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-
+use std::fmt::Display;
 use std::{fmt::Debug, iter::zip};
 
 use log::trace;
@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, Bytes};
 
 use crate::definitions::ImplicitMove;
-use crate::utils::{between, distance, is_in_diagonal_line, is_in_straight_line, is_valid_coord};
+use crate::utils::{between, distance, is_in_diagonal_line, is_in_straight_line, is_valid_coord, unpack_pos};
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum CastlingSide {
@@ -103,7 +103,7 @@ impl Board {
     }
 
     #[allow(non_snake_case)]
-    fn from_FEN() -> Board {
+    pub fn from_FEN(fen: &str) -> (Board, Color, Move) {
         todo!()
     }
 
@@ -377,9 +377,11 @@ impl Board {
                         // capture
                         for step in [0x01, 0xff] {
                             let pos = front_pos.wrapping_add(step);
+                            if !is_valid_coord(pos) {
+                                continue;
+                            }
                             let cell = self.arr[pos as usize];
-                            if is_valid_coord(pos)
-                                && cell != 0x00
+                            if cell != 0x00
                                 && Color::from_byte(cell) != color
                             {
                                 possible_moves.push({
@@ -579,6 +581,112 @@ impl Board {
         let cast_rights = self.castling_right_check(king.clone());
         self.arr[king.position()] = PieceFlag::set_kings_rights(king.code, cast_rights);
     }
+
+    pub fn obstruct_board(&self, player: Color) -> Vec<Vec<bool>> {
+        let mut mask = Vec::with_capacity(8);
+        for _ in 0..8u8 {
+            mask.push(vec![false; 8]);
+        }
+        for file in 0..8u8 {
+            for rank in 0..8u8 {
+                let pos = rank << 4 | file;
+                let piece = Piece::from_code(self.arr[pos as usize], pos);
+                if piece.code == 0x00 || piece.color() != player {
+                    continue;
+                }
+                let (rank, file): (usize, usize) = unpack_pos(pos);
+                mask[file][rank] = true;
+                match piece.type_() {
+                    PieceType::EmptySquare => unreachable!(),
+                    PieceType::Invalid => {},
+                    PieceType::Pawn => {
+                        let step: u8 = match player {
+                            Color::Black => 0x10,
+                            Color::White => 0xf0,
+                        };
+                        // push
+                        let front_pos: u8 = piece.position.wrapping_add(step);
+                        if !is_valid_coord(front_pos) {
+                            continue;
+                        }
+                        // capture cells
+                        for step in [0x01, 0xff] {
+                            let pos = front_pos.wrapping_add(step);
+                            if !is_valid_coord(pos) {
+                                continue;
+                            }
+                            let (rank, file): (usize, usize) = unpack_pos(pos);
+                            mask[file][rank] = true;
+                        }
+                        let cell = self.arr[front_pos as usize];
+                        let (rank, file): (usize, usize) = unpack_pos(front_pos);
+                        mask[file][rank] = true;
+                        if cell == 0x00 {
+                            let pos = front_pos.wrapping_add(step);
+                            let (rank, file): (usize, usize) = unpack_pos(pos);
+                            mask[file][rank] = true;
+                        }
+                    },
+                    PieceType::Knight => {
+                        for offset in KNIGHT_MOVES {
+                            let pos = pos.wrapping_add(*offset);
+                            if !is_valid_coord(pos) {
+                                continue;
+                            }
+                            let (rank, file): (usize, usize) = unpack_pos(pos);
+                            mask[file][rank] = true;
+                        }
+                    },
+                    PieceType::King => {
+                        for offset in KING_MOVES {
+                            let pos = pos.wrapping_add(*offset);
+                            if !is_valid_coord(pos) {
+                                continue;
+                            }
+                            let (rank, file): (usize, usize) = unpack_pos(pos);
+                            mask[file][rank] = true;
+                        }
+                    },
+                    // Sliding pieces
+                    sliding_piece => {
+                        let possible_directions = match sliding_piece {
+                            PieceType::Bishop => BISHOP_DIR,
+                            PieceType::Rook => ROOK_DIR,
+                            PieceType::Queen => QUEEN_DIR,
+                            _ => panic!("Unreachable!"),
+                        };
+                        for dir in possible_directions {
+                            let mut pos = pos.wrapping_add(*dir);
+                            while is_valid_coord(pos) {
+                                let (rank, file): (usize, usize) = unpack_pos(pos);
+                                mask[file][rank] = true;
+                                let cell = self.arr[pos as usize];
+                                if cell != 0x00 {
+                                    break;
+                                }
+                                pos = pos.wrapping_add(*dir);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        mask
+    }
+
+    pub fn obstruct(self, player: Color) -> Self {
+        let mask = self.obstruct_board(player);
+        let mut obstructed_board = self;
+        for file in 0..8u8 {
+            for rank in 0..8u8 {
+                let pos = rank << 4 | file;
+                if mask[file as usize][rank as usize] {
+                    obstructed_board.arr[pos as usize] = 0x00;
+                }
+            }
+        }
+        obstructed_board
+    }
 }
 
 impl Default for Board {
@@ -764,6 +872,16 @@ impl From<u8> for Color {
 impl From<Color> for u8 {
     fn from(value: Color) -> Self {
         value as u8
+    }
+}
+
+impl Display for Color {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.pad(if self == &Self::White {
+            "White"
+        } else {
+            "Black"
+        })
     }
 }
 

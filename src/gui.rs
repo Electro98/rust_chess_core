@@ -5,13 +5,16 @@ pub fn background_color(
     position: (usize, usize),
     selected: bool,
     possible_move: bool,
+    visible: bool,
 ) -> egui::Color32 {
     let color = if (position.0 + position.1) % 2 == 0 {
         egui::Color32::LIGHT_GRAY
     } else {
         egui::Color32::DARK_GRAY
     };
-    if selected {
+    if !visible {
+        color.gamma_multiply(0.2)
+    } else if selected {
         egui::Color32::LIGHT_GREEN
     } else if possible_move {
         color.additive().gamma_multiply(1.3)

@@ -10,7 +10,7 @@ impl Iterator for BetweenIterator {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.current = self.current.wrapping_add(self.step);
-        if self.current == self.target {
+        if self.current == self.target || !is_valid_coord(self.current) {
             None
         } else {
             Some(self.current)

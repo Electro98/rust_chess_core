@@ -104,6 +104,7 @@ impl App {
                                             })
                                         })
                                         .is_some(),
+                                    !matches!(cell, Cell::Unknown),
                                 )),
                         );
                         if btn.clicked() {
