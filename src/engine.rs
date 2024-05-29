@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, Bytes};
 
 use crate::definitions::ImplicitMove;
-use crate::utils::{between, distance, is_in_diagonal_line, is_in_straight_line, is_valid_coord, unpack_pos};
+use crate::utils::{between, distance, in_direction, is_in_diagonal_line, is_in_straight_line, is_valid_coord, unpack_pos};
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum CastlingSide {
@@ -298,21 +298,13 @@ impl Board {
         }
     }
 
-    pub fn who_can_attack(&self, piece: Piece) -> Option<Vec<Piece>> {
-        let color = piece.color();
-        let mut attackers = Vec::with_capacity(8);
-        for file in 0..8u8 {
-            for rank in 0..8u8 {
-                let pos = rank << 4 | file;
-                let cell = Piece::from_code(self.arr[pos as usize], pos);
-                if cell.code != 0x00
-                    && cell.color() != color
-                    && cell.can_attack(piece.position, self.arr)
-                {
-                    attackers.push(cell);
-                }
-            }
-        }
+    pub fn who_can_attack(&self, target: Piece) -> Option<Vec<Piece>> {
+        let attackers: Vec<_> = self
+            .iter_pieces()
+            .filter(|piece| piece.code != 0x00
+                    && piece.color() != target.color()
+                    && piece.can_attack(target.position, self.arr))
+            .collect();
         if attackers.is_empty() {
             None
         } else {
@@ -321,19 +313,11 @@ impl Board {
     }
 
     fn is_attacked(&self, position: u8, color: Color) -> bool {
-        for file in 0..8u8 {
-            for rank in 0..8u8 {
-                let pos = rank << 4 | file;
-                let piece = Piece::from_code(self.arr[pos as usize], pos);
-                if piece.code != 0x00
-                    && piece.color() != color
-                    && piece.can_attack(position, self.arr)
-                {
-                    return true;
-                }
-            }
-        }
-        false
+        self.iter_pieces()
+            .find(|piece| piece.code != 0x00
+                  && piece.color() == color
+                  && piece.can_attack(position, self.arr))
+            .is_some()
     }
 
     pub fn get_possible_moves(&self, color: Color, last_move: Move, bot: bool) -> Vec<Move> {
@@ -343,158 +327,146 @@ impl Board {
             _ => None,
         };
         let mut possible_moves = Vec::with_capacity(256);
-        for file in 0..8u8 {
-            for rank in 0..8u8 {
-                let pos = rank << 4 | file;
-                let piece = Piece::from_code(self.arr[pos as usize], pos);
-                if piece.code == 0x00 || piece.color() != color {
-                    continue;
-                }
-                match piece.type_() {
-                    // Special cases
-                    PieceType::Pawn => {
-                        let step: u8 = match color {
-                            Color::Black => 0x10,
-                            Color::White => 0xf0,
-                        };
-                        // push
-                        let front_pos: u8 = piece.position.wrapping_add(step);
-                        let in_front = self.arr[front_pos as usize];
-                        let promotion = front_pos & 0xf0 == 0 || front_pos & 0xf0 == 0x70;
-                        if in_front == 0x00 {
+        for piece in self.iter_pieces()
+            .filter(|piece| piece.color() == color && piece.type_().is_valid()) {
+            match piece.type_() {
+                // Special cases
+                PieceType::Pawn => {
+                    let step: u8 = match color {
+                        Color::Black => 0x10,
+                        Color::White => 0xf0,
+                    };
+                    // push
+                    let front_pos: u8 = piece.position.wrapping_add(step);
+                    let in_front = self.arr[front_pos as usize];
+                    let promotion = front_pos & 0xf0 == 0 || front_pos & 0xf0 == 0x70;
+                    if in_front == 0x00 {
+                        possible_moves.push({
+                            if !promotion {
+                                Move::QuietMove(piece.clone(), front_pos)
+                            } else {
+                                Move::PromotionQuiet(
+                                    piece.clone(),
+                                    front_pos,
+                                    PieceType::Invalid,
+                                )
+                            }
+                        });
+                    }
+                    // capture
+                    for step in [0x01, 0xff] {
+                        let pos = front_pos.wrapping_add(step);
+                        if !is_valid_coord(pos) {
+                            continue;
+                        }
+                        let cell = self.arr[pos as usize];
+                        if cell != 0x00
+                            && Color::from_byte(cell) != color
+                        {
                             possible_moves.push({
+                                let target = Piece::from_code(cell, pos);
                                 if !promotion {
-                                    Move::QuietMove(piece.clone(), front_pos)
+                                    Move::Capture(piece.clone(), target)
                                 } else {
-                                    Move::PromotionQuiet(
+                                    Move::PromotionCapture(
                                         piece.clone(),
-                                        front_pos,
+                                        target,
                                         PieceType::Invalid,
                                     )
                                 }
                             });
                         }
-                        // capture
-                        for step in [0x01, 0xff] {
-                            let pos = front_pos.wrapping_add(step);
-                            if !is_valid_coord(pos) {
-                                continue;
-                            }
-                            let cell = self.arr[pos as usize];
-                            if cell != 0x00
-                                && Color::from_byte(cell) != color
-                            {
-                                possible_moves.push({
-                                    let target = Piece::from_code(cell, pos);
-                                    if !promotion {
-                                        Move::Capture(piece.clone(), target)
-                                    } else {
-                                        Move::PromotionCapture(
-                                            piece.clone(),
-                                            target,
-                                            PieceType::Invalid,
-                                        )
-                                    }
-                                });
-                            }
-                        }
-                        // double push
-                        if !PieceFlag::Moved.is_set(piece.code) && in_front == 0x00 {
-                            let pos = front_pos.wrapping_add(step);
-                            if self.arr[pos as usize] == 0x00 {
-                                possible_moves.push(Move::PawnDoublePush(piece.clone(), pos))
-                            }
-                        }
-                        // enpassant
-                        if let Some(pawn) = &enpassant_pawn {
-                            if pawn.position.abs_diff(piece.position) == 0x01
-                                && pawn.color() != color
-                            {
-                                possible_moves.push(Move::EnPassantCapture(piece, pawn.clone()))
-                            }
+                    }
+                    // double push
+                    if !PieceFlag::Moved.is_set(piece.code) && in_front == 0x00 {
+                        let pos = front_pos.wrapping_add(step);
+                        if self.arr[pos as usize] == 0x00 {
+                            possible_moves.push(Move::PawnDoublePush(piece.clone(), pos))
                         }
                     }
-                    PieceType::Knight => {
-                        for offset in KNIGHT_MOVES {
-                            let pos = pos.wrapping_add(*offset);
-                            if !is_valid_coord(pos) {
-                                continue;
-                            }
+                    // enpassant
+                    if let Some(pawn) = &enpassant_pawn {
+                        if pawn.position.abs_diff(piece.position) == 0x01
+                            && pawn.color() != color
+                        {
+                            possible_moves.push(Move::EnPassantCapture(piece, pawn.clone()))
+                        }
+                    }
+                }
+                PieceType::Knight => {
+                    for pos in KNIGHT_MOVES.iter()
+                        .map(|off| off.wrapping_add(piece.position))
+                        .filter(|pos| is_valid_coord(*pos)) {
+                        let cell = self.arr[pos as usize];
+                        if cell == 0x00 {
+                            possible_moves.push(Move::QuietMove(piece.clone(), pos));
+                        } else if Color::from_byte(cell) != color {
+                            possible_moves
+                                .push(Move::Capture(piece.clone(), Piece::from_code(cell, pos)))
+                        }
+                    }
+                }
+                PieceType::King => {
+                    for pos in KING_MOVES.iter()
+                        .map(|off| off.wrapping_add(piece.position))
+                        .filter(|pos| is_valid_coord(*pos)) {
+                        let cell = self.arr[pos as usize];
+                        if cell == 0x00 {
+                            possible_moves.push(Move::QuietMove(piece.clone(), pos));
+                        } else if Color::from_byte(cell) != color {
+                            possible_moves
+                                .push(Move::Capture(piece.clone(), Piece::from_code(cell, pos)))
+                        }
+                    }
+                    if PieceFlag::Moved.is_set(piece.code) {
+                        break;
+                    }
+                    for (castling_side, piece_flag) in zip(
+                        [CastlingSide::KingSide, CastlingSide::QueenSide],
+                        [PieceFlag::CanCastleKingSide, PieceFlag::CanCastleQueenSide],
+                    ) {
+                        let rook_pos = piece.position & 0xf0 | castling_side as u8;
+                        let cell = self.arr[rook_pos as usize];
+                        if !PieceFlag::Moved.is_set(cell)
+                            && Color::from_byte(cell) == color
+                            && PieceType::from_byte(cell) == PieceType::Rook
+                            && piece_flag.is_set(piece.code)
+                            && between(rook_pos, piece.position)
+                                .map(|pos| self.arr[pos as usize])
+                                .all(|code| code == 0x00)
+                        {
+                            possible_moves.push(Move::Castling(
+                                piece.clone(),
+                                castling_side,
+                                Piece::from_code(cell, rook_pos),
+                            ))
+                        }
+                    }
+                }
+                // Invalid block
+                PieceType::Invalid => panic!("That's bug! Invalid square in valid space!"),
+                PieceType::EmptySquare => panic!("Empty square can't move"),
+                // Sliding pieces
+                sliding_type => {
+                    let possible_directions = match sliding_type {
+                        PieceType::Bishop => BISHOP_DIR,
+                        PieceType::Rook => ROOK_DIR,
+                        PieceType::Queen => QUEEN_DIR,
+                        _ => panic!("Unreachable!"),
+                    };
+                    for dir in possible_directions {
+                        for pos in in_direction(piece.position, *dir) {
                             let cell = self.arr[pos as usize];
                             if cell == 0x00 {
                                 possible_moves.push(Move::QuietMove(piece.clone(), pos));
                             } else if Color::from_byte(cell) != color {
-                                possible_moves
-                                    .push(Move::Capture(piece.clone(), Piece::from_code(cell, pos)))
-                            }
-                        }
-                    }
-                    PieceType::King => {
-                        for offset in KING_MOVES {
-                            let pos = pos.wrapping_add(*offset);
-                            if !is_valid_coord(pos) {
-                                continue;
-                            }
-                            let cell = self.arr[pos as usize];
-                            if cell == 0x00 {
-                                possible_moves.push(Move::QuietMove(piece.clone(), pos));
-                            } else if Color::from_byte(cell) != color {
-                                possible_moves
-                                    .push(Move::Capture(piece.clone(), Piece::from_code(cell, pos)))
-                            }
-                        }
-                        if PieceFlag::Moved.is_set(piece.code) {
-                            break;
-                        }
-                        for (castling_side, piece_flag) in zip(
-                            [CastlingSide::KingSide, CastlingSide::QueenSide],
-                            [PieceFlag::CanCastleKingSide, PieceFlag::CanCastleQueenSide],
-                        ) {
-                            let rook_pos = piece.position & 0xf0 | castling_side as u8;
-                            let cell = self.arr[rook_pos as usize];
-                            if !PieceFlag::Moved.is_set(cell)
-                                && Color::from_byte(cell) == color
-                                && PieceType::from_byte(cell) == PieceType::Rook
-                                && piece_flag.is_set(piece.code)
-                                && between(rook_pos, piece.position)
-                                    .map(|pos| self.arr[pos as usize])
-                                    .all(|code| code == 0x00)
-                            {
-                                possible_moves.push(Move::Castling(
+                                possible_moves.push(Move::Capture(
                                     piece.clone(),
-                                    castling_side,
-                                    Piece::from_code(cell, rook_pos),
-                                ))
-                            }
-                        }
-                    }
-                    // Invalid block
-                    PieceType::Invalid => panic!("That's bug! Invalid square in valid space!"),
-                    PieceType::EmptySquare => panic!("Empty square can't move"),
-                    // Sliding pieces
-                    sliding_type => {
-                        let possible_directions = match sliding_type {
-                            PieceType::Bishop => BISHOP_DIR,
-                            PieceType::Rook => ROOK_DIR,
-                            PieceType::Queen => QUEEN_DIR,
-                            _ => panic!("Unreachable!"),
-                        };
-                        for dir in possible_directions {
-                            let mut pos = pos.wrapping_add(*dir);
-                            while is_valid_coord(pos) {
-                                let cell = self.arr[pos as usize];
-                                if cell == 0x00 {
-                                    possible_moves.push(Move::QuietMove(piece.clone(), pos));
-                                } else if Color::from_byte(cell) != color {
-                                    possible_moves.push(Move::Capture(
-                                        piece.clone(),
-                                        Piece::from_code(cell, pos),
-                                    ));
-                                    break;
-                                } else {
-                                    break;
-                                }
-                                pos = pos.wrapping_add(*dir);
+                                    Piece::from_code(cell, pos),
+                                ));
+                                break;
+                            } else {
+                                break;
                             }
                         }
                     }
@@ -503,13 +475,12 @@ impl Board {
         }
         if bot {
             for idx in 0..possible_moves.len() {
-                let _move = possible_moves[idx].clone();
-                match _move {
+                possible_moves[idx] = match possible_moves[idx].clone() {
                     Move::PromotionQuiet(pawn, pos, _) => {
                         for _type in [PieceType::Knight, PieceType::Rook, PieceType::Bishop] {
                             possible_moves.push(Move::PromotionQuiet(pawn.clone(), pos, _type));
                         }
-                        possible_moves[idx] = Move::PromotionQuiet(pawn, pos, PieceType::Queen);
+                        Move::PromotionQuiet(pawn, pos, PieceType::Queen)
                     }
                     Move::PromotionCapture(pawn, piece, _) => {
                         for _type in [PieceType::Knight, PieceType::Rook, PieceType::Bishop] {
@@ -519,9 +490,9 @@ impl Board {
                                 _type,
                             ));
                         }
-                        possible_moves[idx] = Move::PromotionCapture(pawn, piece, PieceType::Queen);
+                        Move::PromotionCapture(pawn, piece, PieceType::Queen)
                     }
-                    _ => {}
+                    _move => _move,
                 }
             }
         }
@@ -529,17 +500,9 @@ impl Board {
     }
 
     pub fn is_checked(&self, color: Color) -> Option<(bool, Piece)> {
-        for file in 0..8u8 {
-            for rank in 0..8u8 {
-                let pos = rank << 4 | file;
-                let piece = Piece::from_code(self.arr[pos as usize], pos);
-                if piece.type_() != PieceType::King || piece.color() != color {
-                    continue;
-                }
-                return Some((self.is_attacked(piece.position, color), piece));
-            }
-        }
-        None
+        self.iter_pieces()
+            .find(|piece| piece.color() == color && matches!(piece.type_(), PieceType::King))
+            .map(|piece| (self.is_attacked(piece.position, color.opposite()), piece))
     }
 
     pub fn castling_right_check(&self, king: Piece) -> (bool, bool) {
@@ -674,6 +637,10 @@ impl Board {
         mask
     }
 
+    pub fn hide(self, point_of_view: Color) -> Self {
+        todo!()
+    }
+
     pub fn obstruct(self, player: Color) -> Self {
         let mask = self.obstruct_board(player);
         let mut obstructed_board = self;
@@ -686,6 +653,15 @@ impl Board {
             }
         }
         obstructed_board
+    }
+
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item = u8> + 'a {
+        ITER_INDEX.iter().map(|&i| self.arr[i])
+    }
+
+    pub fn iter_pieces<'a>(&'a self) -> impl Iterator<Item = Piece> + 'a {
+        ITER_INDEX.iter()
+            .map(|&i| Piece::from_code(self.arr[i], i as u8))
     }
 }
 
@@ -707,6 +683,22 @@ impl Default for Board {
     }
 }
 
+const ITER_INDEX: [usize; 64] = {
+    let mut arr = [0; 64];
+    let mut file = 0;
+    let mut rank = 0;
+    while file < 8 {
+        arr[file * 8 + rank] = rank << 4 | file;
+        if rank < 7 {
+            rank += 1;
+        } else {
+            rank = 0;
+            file += 1;
+        }
+    }
+    arr
+};
+
 /** Tables directions for pieces */
 const BISHOP_DIR: &[u8] = &[0x11, 0x0f, 0xef, 0xf1];
 const ROOK_DIR: &[u8] = &[0x10, 0xff, 0xf0, 0x01];
@@ -720,7 +712,7 @@ const KNIGHT_MOVES: &[u8] = &[0x12, 0x21, 0x1f, 0x0e, 0xee, 0xdf, 0xe1, 0xf2];
  * Bit 7 -- Color of the piece
  * - 1 -- Black
  * - 0 -- White
- * Bit 6 -- Not used
+ * Bit 6 -- Unknown flag
  * Bit 5 -- Castle flag for Kings only - QueenSide
  * Bit 4 -- Castle flag for Kings only - KingSide
  * Bit 3 -- Piece has moved flag
@@ -746,6 +738,8 @@ enum PieceFlag {
     CanCastleKingSide = 0x10,
     /** Bit 5 -- Castle flag for Kings only - QueenSide */
     CanCastleQueenSide = 0x20,
+    /** Bit 6 -- That's cell isn't given to us */
+    UnknownCellFlag = 0x40,
 }
 
 impl PieceFlag {
@@ -901,6 +895,10 @@ impl PieceType {
     #[inline]
     fn from_byte(byte: u8) -> PieceType {
         unsafe { std::mem::transmute(byte & 0x07) }
+    }
+
+    fn is_valid(&self) -> bool {
+        matches!(self, Self::Pawn | Self::Knight | Self::Bishop | Self::Rook | Self::Queen | Self::King)
     }
 }
 

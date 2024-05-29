@@ -2,7 +2,7 @@ mod definitions;
 pub mod engine;
 mod game;
 pub mod server;
-mod utils;
+pub mod utils;
 pub use definitions::{Cell, DefaultMove, Figure, GameState, MatchInterface};
 pub use engine::{Color, PieceType};
 pub use game::Game;
@@ -13,6 +13,8 @@ pub fn add(a: i32, b: i32) -> i32 {
 
 #[cfg(test)]
 mod tests {
+    use engine::Piece;
+
     use self::engine::Board;
 
     use super::*;
@@ -21,6 +23,26 @@ mod tests {
     fn it_works() {
         let result = add(2, 2);
         assert_eq!(result, 4);
+    }
+
+    #[test]
+    fn test_iters() {
+        let board = Board::default();
+        let mut iter = board.iter();
+        let mut iter_pieces = board.iter_pieces();
+        for file in 0..8u8 {
+            for rank in 0..8u8 {
+                let pos = rank << 4 | file;
+                let code = board.inside()[pos as usize];
+                let piece = Piece::from_code(code, pos);
+                let iter_code = iter.next();
+                let iter_piece = iter_pieces.next();
+                assert!(iter_piece.is_some(), "Iterator is exhausted too soon!");
+                assert!(iter_code.is_some(), "Raw iterator is exhausted too soon!");
+                assert!(piece == iter_piece.unwrap(), "Piece is different from for loop!");
+                assert!(code == iter_code.unwrap(), "Code is different from for loop!");
+            }
+        }
     }
 
     #[test]

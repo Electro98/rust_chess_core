@@ -8,6 +8,7 @@ pub struct BetweenIterator {
 impl Iterator for BetweenIterator {
     type Item = u8;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         self.current = self.current.wrapping_add(self.step);
         if self.current == self.target || !is_valid_coord(self.current) {
@@ -58,6 +59,29 @@ pub fn between(from: u8, to: u8) -> BetweenIterator {
     }
 }
 
+pub struct DirectionIterator {
+    position: u8,
+    direction: u8
+}
+
+impl Iterator for DirectionIterator {
+    type Item = u8;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.position = self.position.wrapping_add(self.direction);
+        if is_valid_coord(self.position) {
+            Some(self.position)
+        } else {
+            None
+        }
+    }
+}
+
+pub fn in_direction(position: u8, direction: u8) -> DirectionIterator {
+    DirectionIterator { position, direction }
+}
+
 pub fn distance(from: u8, to: u8) -> u8 {
     (from & 0x0f).abs_diff(to & 0x0f) + ((from & 0xf0) >> 4).abs_diff((to & 0xf0) >> 4)
 }
@@ -77,10 +101,12 @@ pub fn is_valid_coord(coord: u8) -> bool {
     coord & 0x88 == 0x00
 }
 
+#[inline]
 pub fn compact_pos(rank: u8, file: u8) -> u8 {
     rank << 4 | file
 }
 
+#[inline]
 pub fn unpack_pos<T: From<u8>, V: Into<u8>>(pos: V) -> (T, T) {
     let pos: u8 = pos.into();
     (((pos & 0xf0) >> 4).into(), (pos & 0x0f).into())
