@@ -11,7 +11,7 @@ pub struct Figure {
     pub can_move: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Cell {
     Empty,
     Figure(Figure),
@@ -34,7 +34,8 @@ pub type DefaultMove = Move<BaseMove>;
 
 pub trait MatchInterface<T: ImplicitMove + for<'a> Deserialize<'a> + Serialize> {
     fn current_board(&self) -> Vec<Vec<Cell>>;
-    fn possible_moves(&self, file: u32, rank: u32) -> Option<Vec<Move<T>>>;
+    fn cell(&self, rank: usize, file: usize) -> Option<Cell>;
+    fn possible_moves(&self, rank: usize, file: usize) -> Option<Vec<Move<T>>>;
     fn execute_move(&mut self, _move: Move<T>) -> GameState;
     fn wait_move(&mut self) -> GameState;
     // info

@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, Bytes};
 
 use crate::definitions::ImplicitMove;
-use crate::utils::{between, distance, in_direction, is_in_diagonal_line, is_in_straight_line, is_valid_coord, unpack_pos};
+use crate::utils::{between, compact_pos, distance, in_direction, is_in_diagonal_line, is_in_straight_line, is_valid_coord, unpack_pos};
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum CastlingSide {
@@ -109,6 +109,11 @@ impl Board {
 
     pub fn inside(&self) -> &[u8; 128] {
         &self.arr
+    }
+
+    pub fn get(&self, rank: u8, file: u8) -> Piece {
+        let position = compact_pos(rank, file);
+        Piece::from_code(self.arr[position as usize], position)
     }
 
     /** Execute ***valid*** move. */
@@ -301,7 +306,7 @@ impl Board {
     pub fn who_can_attack(&self, target: Piece) -> Option<Vec<Piece>> {
         let attackers: Vec<_> = self
             .iter_pieces()
-            .filter(|piece| piece.code != 0x00
+            .filter(|piece| piece.type_().is_valid()
                     && piece.color() != target.color()
                     && piece.can_attack(target.position, self.arr))
             .collect();
@@ -314,7 +319,7 @@ impl Board {
 
     fn is_attacked(&self, position: u8, color: Color) -> bool {
         self.iter_pieces()
-            .find(|piece| piece.code != 0x00
+            .find(|piece| piece.type_().is_valid()
                   && piece.color() == color
                   && piece.can_attack(position, self.arr))
             .is_some()
@@ -561,7 +566,7 @@ impl Board {
                 mask[file][rank] = true;
                 match piece.type_() {
                     PieceType::EmptySquare => unreachable!(),
-                    PieceType::Invalid => {},
+                    PieceType::Invalid => unreachable!(),
                     PieceType::Pawn => {
                         let step: u8 = match player {
                             Color::Black => 0x10,
@@ -637,8 +642,96 @@ impl Board {
         mask
     }
 
-    pub fn hide(self, point_of_view: Color) -> Self {
-        todo!()
+    pub fn hide(mut self, point_of_view: Color) -> Self {
+        ITER_INDEX.iter().for_each(|pos| {
+            self.arr[*pos] = PieceFlag::UnknownCellFlag.set(self.arr[*pos]);
+        });
+        ITER_INDEX.iter().for_each(|pos| {
+            let piece = Piece::from_code(self.arr[*pos], *pos as u8);
+            if !piece.type_().is_valid() || piece.color() != point_of_view {
+                return;
+            }
+            self.arr[*pos] = PieceFlag::UnknownCellFlag.unset(piece.code);
+            match piece.type_() {
+                PieceType::EmptySquare => unreachable!(),
+                PieceType::Invalid => unreachable!(),
+                PieceType::Pawn => {
+                    let step: u8 = match piece.color() {
+                        Color::Black => 0x10,
+                        Color::White => 0xf0,
+                    };
+                    // push
+                    let front_pos: u8 = piece.position.wrapping_add(step);
+                    if !is_valid_coord(front_pos) {
+                        return;
+                    }
+                    // capture cells
+                    for step in [0x01, 0xff] {
+                        let pos = front_pos.wrapping_add(step);
+                        if !is_valid_coord(pos) {
+                            continue;
+                        }
+                        self.arr[pos as usize] = PieceFlag::UnknownCellFlag.unset(self.arr[pos as usize]);
+                    }
+                    let cell = PieceFlag::UnknownCellFlag.unset(self.arr[front_pos as usize]);
+                    self.arr[front_pos as usize] = cell;
+                    if cell == 0x00 {
+                        let pos = front_pos.wrapping_add(step);
+                        self.arr[pos as usize] = PieceFlag::UnknownCellFlag.unset(self.arr[pos as usize]);
+                    }
+                },
+                PieceType::Knight => {
+                    for offset in KNIGHT_MOVES {
+                        let pos = piece.position.wrapping_add(*offset);
+                        if !is_valid_coord(pos) {
+                            continue;
+                        }
+                        self.arr[pos as usize] = PieceFlag::UnknownCellFlag.unset(self.arr[pos as usize]);
+                    }
+                },
+                PieceType::King => {
+                    for offset in KING_MOVES {
+                        let pos = piece.position.wrapping_add(*offset);
+                        if !is_valid_coord(pos) {
+                            continue;
+                        }
+                        self.arr[pos as usize] = PieceFlag::UnknownCellFlag.unset(self.arr[pos as usize]);
+                    }
+                },
+                // Sliding pieces
+                sliding_piece => {
+                    let possible_directions = match sliding_piece {
+                        PieceType::Bishop => BISHOP_DIR,
+                        PieceType::Rook => ROOK_DIR,
+                        PieceType::Queen => QUEEN_DIR,
+                        _ => panic!("Unreachable!"),
+                    };
+                    for dir in possible_directions {
+                        for pos in in_direction(piece.position, *dir) {
+                            let cell = PieceFlag::UnknownCellFlag.unset(self.arr[pos as usize]);
+                            self.arr[pos as usize] = cell;
+                            if cell != 0x00 {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        self
+    }
+
+    pub fn hide_and_obstruct(self, point_of_view: Color) -> Self {
+        let mut board = self.hide(point_of_view);
+        ITER_INDEX.iter().for_each(|pos| {
+            let code = board.arr[*pos];
+            board.arr[*pos] = if PieceFlag::UnknownCellFlag.is_set(code) {
+                PieceFlag::UnknownCellFlag as u8
+            } else {
+                code
+            };
+        });
+        board
     }
 
     pub fn obstruct(self, player: Color) -> Self {
@@ -731,7 +824,7 @@ pub struct Piece {
     position: u8,
 }
 
-enum PieceFlag {
+pub enum PieceFlag {
     /** Bit 3 -- Piece has moved flag */
     Moved = 0x08,
     /** Bit 4 -- Castle flag for Kings only - KingSide */
@@ -743,12 +836,16 @@ enum PieceFlag {
 }
 
 impl PieceFlag {
-    fn is_set(self, code: u8) -> bool {
+    pub fn is_set(self, code: u8) -> bool {
         code & self as u8 != 0
     }
 
     fn set(self, code: u8) -> u8 {
         code | self as u8
+    }
+
+    fn unset(self, code: u8) -> u8 {
+        code & (0xff ^ self as u8)
     }
 
     fn set_kings_rights(king: u8, rights: (bool, bool)) -> u8 {

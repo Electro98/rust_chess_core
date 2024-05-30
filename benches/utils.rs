@@ -81,6 +81,9 @@ fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("for raw count", |b| b.iter(|| for_raw_count(black_box(&Board::default()))));
     c.bench_function("iter piece count", |b| b.iter(|| iter_pieces(black_box(&Board::default()))));
     c.bench_function("for piece count", |b| b.iter(|| for_piece_count(black_box(&Board::default()))));
+    c.bench_function("obstruction vec", |b| b.iter(|| black_box(Board::default()).obstruct(chess_engine::Color::White)));
+    c.bench_function("just mark hide", |b| b.iter(|| black_box(Board::default()).hide(chess_engine::Color::White)));
+    c.bench_function("obstruction hide", |b| b.iter(|| black_box(Board::default()).hide_and_obstruct(chess_engine::Color::White)));
     c.bench_function("stupid game 100", |b| b.iter(|| {
         let game: Game = Default::default();
         stupid_game(game, 100)

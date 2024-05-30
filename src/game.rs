@@ -1,37 +1,147 @@
 use std::cmp::min;
 
 use crate::definitions::GameState;
-use crate::engine::{Board, Color, Move as ImplMove, Piece, PieceType};
-use crate::utils::unpack_pos;
+use crate::engine::{Board, Color, Move as ImplMove, Piece, PieceFlag, PieceType};
+use crate::utils::{compact_pos, unpack_pos};
 use crate::{Cell, DefaultMove, Figure, MatchInterface};
 
 use rand::seq::IteratorRandom;
 
-fn is_move_valid(_move: &ImplMove, board: &Board, current_player: Color) -> bool {
+#[derive(Debug)]
+pub struct InvalidMoveError {}
+
+impl TryInto<DefaultMove> for ImplMove {
+    type Error = InvalidMoveError;
+
+    fn try_into(self) -> Result<DefaultMove, Self::Error> {
+        if matches!(self, ImplMove::NullMove) {
+            Err(InvalidMoveError {})
+        } else {
+            Ok(DefaultMove {
+                from: unpack_pos(self.piece().unwrap().position() as u8),
+                to: unpack_pos(self.end_position().unwrap()),
+                _move: self,
+            })
+        }
+    }
+}
+
+#[inline]
+fn is_move_valid(_move: &ImplMove, board: &Board, current_player: Color, default: bool) -> bool {
     let mut board: Board = board.clone();
     board.execute(_move.clone());
     match board.is_checked(current_player) {
         Some((checked, _)) => !checked,
-        None => false,
+        None => default,
     }
 }
 
-impl DefaultMove {
-    fn from_move(_move: ImplMove) -> DefaultMove {
-        DefaultMove {
-            from: {
-                let pos = _move
-                    .piece()
-                    .expect("There must be no Null moves out generator!")
-                    .position() as u8;
-                unpack_pos(pos)
-            },
-            to: {
-                let pos: u8 = _move.end_position().unwrap();
-                unpack_pos(pos)
-            },
-            _move: _move.clone(),
+pub fn ui_board(board: &Board) -> Vec<Vec<Cell>> {
+    (0..8).map(|rank|
+        (0..8).map(|file| compact_pos(rank, file))
+            .map(|pos| (board.inside()[pos as usize], pos))
+            .map(|(code, position)| {
+                if PieceFlag::UnknownCellFlag.is_set(code) {
+                    Cell::Unknown
+                } else if code == 0x00 {
+                    Cell::Empty
+                } else {
+                    let piece = Piece::from_code(code, position);
+                    Cell::Figure(Figure {
+                        kind: piece.type_(),
+                        color: piece.color(),
+                        last_move: false,
+                        impose_check: false,
+                        can_move: true,
+                    })
+                }
+            })
+            .collect())
+        .collect()
+}
+
+#[derive(Debug, Clone)]
+pub struct DarkGame {
+    board: Board,
+    player: Color,
+    last_move: ImplMove,
+    finished: bool,
+}
+
+impl DarkGame {
+    pub fn new(board: Board, player: Color) -> Self {
+        DarkGame { board, player, last_move: ImplMove::NullMove, finished: false }
+    }
+}
+
+impl MatchInterface<ImplMove> for DarkGame {
+    fn current_board(&self) -> Vec<Vec<Cell>> {
+        ui_board(&self.board)
+    }
+    
+    fn cell(&self, rank: usize, file: usize) -> Option<Cell> {
+        if file < 8 && rank < 8 {
+            let pos = compact_pos(rank as u8, file as u8);
+            let piece = Piece::from_code(self.board.inside()[pos as usize], pos);
+            Some(if piece.type_() == PieceType::EmptySquare {
+                Cell::Empty
+            } else {
+                Cell::Figure(Figure {
+                    kind: piece.type_(),
+                    color: piece.color(),
+                    last_move: false,
+                    impose_check: false,
+                    can_move: true,
+                })
+            })
+        } else {
+            None
         }
+    }
+
+    fn possible_moves(&self, rank: usize, file: usize) -> Option<Vec<DefaultMove>> {
+        let piece = self.board.get(rank as u8, file as u8);
+        if self.finished
+            || matches!(piece.type_(), PieceType::EmptySquare)
+            || piece.color() != self.player {
+            None
+        } else {
+            let moves: Vec<_> = self.board
+                .get_possible_moves(self.player, self.last_move.clone(), false)
+                .into_iter()
+                .filter(|_move| _move.piece().map(|move_piece| move_piece == &piece).unwrap_or(false))
+                .filter(|_move| is_move_valid(_move, &self.board, self.player, true))
+                .map(|_move| _move.try_into().unwrap())
+                .collect();
+            if moves.is_empty() {
+                None
+            } else {
+                Some(moves)
+            }
+        }
+    }
+
+    fn execute_move(&mut self, _move: DefaultMove) -> GameState {
+        todo!()
+    }
+
+    fn wait_move(&mut self) -> GameState {
+        todo!()
+    }
+
+    fn current_player(&self) -> Color {
+        self.player
+    }
+
+    fn checked(&self) -> bool {
+        self.board
+            .is_checked(self.player)
+            .map(|(checked, _)| checked)
+            .unwrap_or(false)
+    }
+
+    fn game_ended(&self) -> bool {
+        self.finished
     }
 }
 
@@ -90,7 +200,7 @@ impl Game {
                 true,
             )
             .into_iter()
-            .filter(|impl_move| is_move_valid(impl_move, &self.board, self.current_player))
+            .filter(|impl_move| is_move_valid(impl_move, &self.board, self.current_player, false))
             .collect();
         self.finished = moves.is_empty();
         self.board.castling_rights(king);
@@ -113,12 +223,11 @@ impl Game {
                 true,
             )
             .into_iter()
-            .filter(|impl_move| is_move_valid(impl_move, &self.board, self.current_player))
+            .filter(|impl_move| is_move_valid(impl_move, &self.board, self.current_player, false))
             .choose(&mut rand::thread_rng());
 
         if let Some(_move) = chosen_move {
-            let wrapped_move = DefaultMove::from_move(_move);
-            self.execute_move(wrapped_move)
+            self.execute_move(_move.try_into().unwrap())
         } else {
             self.finished = true;
             GameState::Finished
@@ -127,12 +236,24 @@ impl Game {
 
     pub fn vision_board(&self, _player: Color) -> Board {
         self.board.clone()
-        // .obstruct(_player)
+            .hide_and_obstruct(_player)
     }
+}
 
-    pub fn cell(&self, file: usize, rank: usize) -> Option<Cell> {
+impl Default for Game {
+    fn default() -> Self {
+        Game::new(Default::default())
+    }
+}
+
+impl MatchInterface<ImplMove> for Game {
+    fn current_board(&self) -> Vec<Vec<Cell>> {
+        ui_board(&self.board)
+    }
+    
+    fn cell(&self, rank: usize, file: usize) -> Option<Cell> {
         if file < 8 && rank < 8 {
-            let pos = (rank << 4) as u8 + file as u8;
+            let pos = compact_pos(rank as u8, file as u8);
             let piece = Piece::from_code(self.board.inside()[pos as usize], pos);
             Some(if piece.type_() == PieceType::EmptySquare {
                 Cell::Empty
@@ -150,96 +271,25 @@ impl Game {
         }
     }
 
-    pub fn player_board(&self, player: Color) -> Vec<Vec<Cell>> {
-        let mask = self.board.obstruct_board(player);
-        let mut board = Vec::with_capacity(8);
-        for rank in 0..8u8 {
-            let mut row = Vec::with_capacity(8);
-            for file in 0..8u8 {
-                let pos = (rank << 4) + file;
-                let piece = Piece::from_code(self.board.inside()[pos as usize], pos);
-                row.push(if !mask[file as usize][rank as usize] {
-                    Cell::Unknown
-                } else if piece.type_() == PieceType::EmptySquare {
-                    Cell::Empty
-                } else {
-                    Cell::Figure(Figure {
-                        kind: piece.type_(),
-                        color: piece.color(),
-                        last_move: false,
-                        impose_check: false,
-                        can_move: true,
-                    })
-                });
-            }
-            board.push(row);
-        }
-        board
-    }
-}
-
-impl Default for Game {
-    fn default() -> Self {
-        Game::new(Default::default())
-    }
-}
-
-impl MatchInterface<ImplMove> for Game {
-    fn current_board(&self) -> Vec<Vec<Cell>> {
-        let mut board = Vec::with_capacity(8);
-        for rank in 0..8u8 {
-            let mut row = Vec::with_capacity(8);
-            for file in 0..8u8 {
-                let pos = (rank << 4) + file;
-                let piece = Piece::from_code(self.board.inside()[pos as usize], pos);
-                row.push(if piece.type_() == PieceType::EmptySquare {
-                    Cell::Empty
-                } else {
-                    Cell::Figure(Figure {
-                        kind: piece.type_(),
-                        color: piece.color(),
-                        last_move: false,
-                        impose_check: false,
-                        can_move: true,
-                    })
-                });
-            }
-            board.push(row);
-        }
-        board
-    }
-
-    fn possible_moves(&self, rank: u32, file: u32) -> Option<Vec<DefaultMove>> {
-        if self.finished {
-            return None;
-        }
-        let pos = (rank << 4) as u8 | file as u8;
-        let piece = Piece::from_code(self.board.inside()[pos as usize], pos);
-        // println!("Piece: {:?}", piece);
-        if piece.type_() == PieceType::EmptySquare || piece.color() != self.current_player {
-            return None;
-        }
-        let moves: Vec<_> = self
-            .board
-            .get_possible_moves(
-                self.current_player,
-                self.last_move().unwrap_or(ImplMove::NullMove),
-                false,
-            )
-            .into_iter()
-            .filter(|_move| {
-                _move
-                    .piece()
-                    .map(|move_piece| move_piece == &piece)
-                    .unwrap_or(false)
-            })
-            .filter(|impl_move| is_move_valid(impl_move, &self.board, self.current_player))
-            .map(DefaultMove::from_move)
-            .collect();
-        if moves.is_empty() {
+    fn possible_moves(&self, rank: usize, file: usize) -> Option<Vec<DefaultMove>> {
+        let piece = self.board.get(rank as u8, file as u8);
+        if self.finished
+            || matches!(piece.type_(), PieceType::EmptySquare)
+            || piece.color() != self.current_player{
             None
         } else {
-            Some(moves)
+            let moves: Vec<_> = self.board
+                .get_possible_moves(self.current_player, self.last_move().unwrap_or(ImplMove::NullMove), false)
+                .into_iter()
+                .filter(|_move| _move.piece().map(|move_piece| move_piece == &piece).unwrap_or(false))
+                .filter(|_move| is_move_valid(_move, &self.board, self.current_player, false))
+                .map(|_move| _move.try_into().unwrap())
+                .collect();
+            if moves.is_empty() {
+                None
+            } else {
+                Some(moves)
+            }
         }
     }
 

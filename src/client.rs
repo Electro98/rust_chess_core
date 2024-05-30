@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-use chess_engine::server::definitions::ClientMessage;
+use chess_engine::{server::definitions::ClientMessage, DarkGame};
 use chess_engine::{engine::Board, Cell as FieldCell, Color, DefaultMove, Game, MatchInterface};
 use eframe::egui::{self, Vec2};
 use futures::{FutureExt, StreamExt};
@@ -31,22 +31,22 @@ pub struct Connecting {
 #[derive(Debug)]
 pub struct WaitingOpponent {
     client_thread: std::thread::JoinHandle<()>,
-    game: Game,
+    game: DarkGame,
 }
 #[derive(Debug)]
 pub struct PlayerMove {
     client_thread: std::thread::JoinHandle<()>,
-    game: Game,
+    game: DarkGame,
 }
 #[derive(Debug)]
 pub struct MoveValidation {
     client_thread: std::thread::JoinHandle<()>,
-    game: Game,
+    game: DarkGame,
 }
 #[derive(Debug)]
 pub struct OpponentMove {
     client_thread: std::thread::JoinHandle<()>,
-    game: Game,
+    game: DarkGame,
 }
 #[derive(Debug)]
 pub struct Canceled {
@@ -54,7 +54,7 @@ pub struct Canceled {
 }
 #[derive(Debug)]
 pub struct Finished {
-    game: Game,
+    game: DarkGame,
     winner: Color,
 }
 
@@ -111,7 +111,7 @@ impl Connecting {
         };
         match msg {
             ClientMessage::GameStateSync(board, current_player, you, opponent_connected) => {
-                let game = Game::with_player(board, current_player);
+                let game = DarkGame::new(board, current_player);
                 match (current_player == you, opponent_connected) {
                     (false, true) => OpponentMove {
                         client_thread: self.client_thread,
@@ -239,7 +239,7 @@ impl OnlineClient {
             Ok(false)
         }
     }
-    fn get_game(&self) -> Option<Game> {
+    fn get_game(&self) -> Option<DarkGame> {
         match &*self.online_match.lock().unwrap() {
             OnlineMatchState::PlayerMove(mov) => Some(mov.game.clone()),
             OnlineMatchState::OpponentMove(mov) => Some(mov.game.clone()),
@@ -257,7 +257,7 @@ fn message_received(state: OnlineMatchState, msg: ClientMessage) -> OnlineMatchS
     ) -> OnlineMatchState {
         let (board, current_player, you, opponent_connected) = sync_msg;
         debg!("Current player: {:?} I'm am {:?}", current_player, you);
-        let game = Game::with_player(board, current_player);
+        let game = DarkGame::new(board, current_player);
         match (current_player == you, opponent_connected) {
             (false, true) => OpponentMove {
                 client_thread,
@@ -443,7 +443,7 @@ fn main() -> Result<(), eframe::Error> {
 
 enum ScreenData {
     ConnectMenu,
-    Game(Game, bool),
+    Game(DarkGame, bool),
     WaitSomething(String),
     ErrorOccured(Option<String>),
 }
@@ -538,7 +538,7 @@ impl App {
         &mut self,
         ctx: &egui::Context,
         frame: &mut eframe::Frame,
-        game: Game,
+        game: DarkGame,
         current_player: bool,
     ) -> Option<DefaultMove> {
         let mut new_click = None;
@@ -566,12 +566,12 @@ impl App {
         if let SavedData::ChosenFigure((rank, file)) = &self.saved_data {
             new_click?;
             match game
-                .cell(*file, *rank)
+                .cell(*rank, *file)
                 .expect("Invalid file and/or rank, bug")
             {
                 FieldCell::Figure(_) => {
                     let _move = game
-                        .possible_moves(*rank as u32, *file as u32)
+                        .possible_moves(*rank, *file)
                         .and_then(|moves| {
                             moves
                                 .into_iter()
@@ -627,7 +627,7 @@ impl App {
         &mut self,
         ui: &mut egui::Ui,
         _frame: &mut eframe::Frame,
-        game: &Game,
+        game: &DarkGame,
         _player: Color,
     ) -> Option<(u32, u32)> {
         let chosen_figure = if let SavedData::ChosenFigure(fig) = &self.saved_data {
@@ -636,10 +636,10 @@ impl App {
             None
         };
         let possible_moves =
-            chosen_figure.and_then(|(rank, file)| game.possible_moves(*rank as u32, *file as u32));
+            chosen_figure.and_then(|(rank, file)| game.possible_moves(*rank, *file));
         // trc!("Moves: {:?}", possible_moves);
         // let board = game.current_board();
-        let board = game.player_board(_player);
+        let board = game.current_board();
         let mut new_click = None;
         egui::Grid::new("main_grid")
             .striped(true)
