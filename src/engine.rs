@@ -932,6 +932,7 @@ impl Debug for Piece {
     }
 }
 
+#[rifgen::rifgen_attr::generate_interface]
 #[derive(PartialEq, Debug, Default, Clone, Copy, Serialize, Deserialize)]
 pub enum Color {
     Black = 0x00,
@@ -976,6 +977,7 @@ impl Display for Color {
     }
 }
 
+#[rifgen::rifgen_attr::generate_interface]
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum PieceType {
     Pawn = 0x01,

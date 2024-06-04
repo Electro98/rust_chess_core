@@ -4,33 +4,44 @@ version = "0.1.0"
 edition = "2021"
 default-run = "chess"
 
+[lib]
+crate-type = ["cdylib", "lib"]
+
 [[bin]]
 name = "server"
 path = "src/server_bin.rs"
+required-features = ["build-binary"] 
 
 [[bin]]
 name = "client"
 path = "src/client.rs"
+required-features = ["build-binary"] 
 
 [[bin]]
 name = "chess"
 path = "src/main.rs"
+required-features = ["build-binary"] 
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+android_logger = "0.13.3"
 anyhow = "1.0.79"
-eframe = "0.25.0"
-egui_extras = { features = ["image"] }
+eframe = { version = "0.25.0", optional = true }
+egui_extras = { features = ["image"], optional = true}
 env_logger = { version = "0.11.0", features = [
     "auto-color",
     "humantime",
 ] }
+flapigen = "0.6.1"
 futures = "0.3.30"
+jni = "0.21.1"
+jni-sys = "0.3.0"
 log = "0.4.20"
 num-traits = "0.2.18"
 postcard = { version = "1.0.8", features = ["alloc"] }
 rand = "0.8.5"
+rifgen = "0.1.61"
 serde = "1.0.201"
 serde_with = "3.8.1"
 tokio = { version = "1.37.0", features = ["full"] }
@@ -40,6 +51,13 @@ tungstenite = "0.21.0"
 url = "2.5.0"
 uuid = { version = "1.8.0", features = ["v4"] }
 warp = "0.3.7"
+
+[features]
+build-binary = ["eframe", "egui_extras"]
+
+[build-dependencies]
+rifgen = "*"
+flapigen = "*"
 
 [dev-dependencies]
 criterion = "0.5.1"

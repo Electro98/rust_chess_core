@@ -11,7 +11,7 @@ pub struct Figure {
     pub can_move: bool,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Cell {
     Empty,
     Figure(Figure),

@@ -1,1 +1,4 @@
+# Rust
 /target
+/src/glue.rs
+/src/auto-glue.rs.in
