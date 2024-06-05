@@ -45,7 +45,10 @@ impl WrapperGame {
 
     #[generate_interface]
     pub fn possible_moves(&self, rank: usize, file: usize) -> Moves {
-        self.game.possible_moves(rank, file)
+        debug!("Counting moves for r: {} f: {}", rank, file);
+        let moves = self.game.possible_moves(rank, file);
+        debug!("Moves count: {}", moves.as_ref().map(|m| m.len()).unwrap_or(0));
+        moves
             .map(|moves|
                 moves.into_iter()
                     .map(|inner| WrapperMove {_move: inner})
