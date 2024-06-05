@@ -1,13 +1,14 @@
-mod definitions;
-pub mod engine;
-mod game;
 pub mod server;
-pub mod utils;
+pub mod online_game;
 pub mod android_bridge;
+mod core;
 
-pub use definitions::{Cell, DefaultMove, Figure, GameState, MatchInterface};
-pub use engine::{Color, PieceType};
-pub use game::{DarkGame, Game};
+// module re-exports
+pub use core::*;
+
+pub use core::definitions::{Cell, DefaultMove, Figure, GameState, MatchInterface};
+pub use core::engine::{Color, PieceType};
+pub use core::game::{DarkGame, Game};
 
 #[cfg(test)]
 mod tests;
