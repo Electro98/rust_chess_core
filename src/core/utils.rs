@@ -61,7 +61,7 @@ pub fn between(from: u8, to: u8) -> BetweenIterator {
 
 pub struct DirectionIterator {
     position: u8,
-    direction: u8
+    direction: u8,
 }
 
 impl Iterator for DirectionIterator {
@@ -79,7 +79,10 @@ impl Iterator for DirectionIterator {
 }
 
 pub fn in_direction(position: u8, direction: u8) -> DirectionIterator {
-    DirectionIterator { position, direction }
+    DirectionIterator {
+        position,
+        direction,
+    }
 }
 
 pub fn distance(from: u8, to: u8) -> u8 {

@@ -1,10 +1,8 @@
-
 #[allow(unused_imports)]
-use log::{trace, debug, info, warn};
+use log::{debug, info, trace, warn};
 use rifgen::rifgen_attr::generate_interface;
 
 use crate::{Cell, Color, DefaultMove, Figure, Game, GameState, MatchInterface, PieceType};
-
 
 pub struct WrapperGame {
     game: Game,
@@ -26,7 +24,7 @@ pub struct WrapperMove {
 
 #[derive(Clone)]
 pub struct WrappedCell {
-    cell: Cell
+    cell: Cell,
 }
 
 pub type Moves = Vec<WrapperMove>;
@@ -35,7 +33,9 @@ pub type Cells = Vec<WrappedCell>;
 impl WrapperGame {
     #[generate_interface(constructor)]
     pub fn new() -> WrapperGame {
-        Self { game: Default::default() }
+        Self {
+            game: Default::default(),
+        }
     }
 
     #[generate_interface]
@@ -47,18 +47,24 @@ impl WrapperGame {
     pub fn possible_moves(&self, rank: usize, file: usize) -> Moves {
         debug!("Counting moves for r: {} f: {}", rank, file);
         let moves = self.game.possible_moves(rank, file);
-        debug!("Moves count: {}", moves.as_ref().map(|m| m.len()).unwrap_or(0));
+        debug!(
+            "Moves count: {}",
+            moves.as_ref().map(|m| m.len()).unwrap_or(0)
+        );
         moves
-            .map(|moves|
-                moves.into_iter()
-                    .map(|inner| WrapperMove {_move: inner})
-                    .collect())
+            .map(|moves| {
+                moves
+                    .into_iter()
+                    .map(|inner| WrapperMove { _move: inner })
+                    .collect()
+            })
             .unwrap_or_else(Vec::new)
     }
 
     #[generate_interface]
     pub fn board(&self) -> Cells {
-        self.game.current_board()
+        self.game
+            .current_board()
             .into_iter()
             .flatten()
             .map(WrappedCell::new)

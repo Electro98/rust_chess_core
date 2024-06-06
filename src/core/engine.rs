@@ -8,7 +8,10 @@ use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, Bytes};
 
 use crate::definitions::ImplicitMove;
-use crate::utils::{between, compact_pos, distance, in_direction, is_in_diagonal_line, is_in_straight_line, is_valid_coord, unpack_pos};
+use crate::utils::{
+    between, compact_pos, distance, in_direction, is_in_diagonal_line, is_in_straight_line,
+    is_valid_coord, unpack_pos,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum CastlingSide {
@@ -306,9 +309,11 @@ impl Board {
     pub fn who_can_attack(&self, target: Piece) -> Option<Vec<Piece>> {
         let attackers: Vec<_> = self
             .iter_pieces()
-            .filter(|piece| piece.type_().is_valid()
+            .filter(|piece| {
+                piece.type_().is_valid()
                     && piece.color() != target.color()
-                    && piece.can_attack(target.position, self.arr))
+                    && piece.can_attack(target.position, self.arr)
+            })
             .collect();
         if attackers.is_empty() {
             None
@@ -319,9 +324,11 @@ impl Board {
 
     fn is_attacked(&self, position: u8, color: Color) -> bool {
         self.iter_pieces()
-            .find(|piece| piece.type_().is_valid()
-                  && piece.color() == color
-                  && piece.can_attack(position, self.arr))
+            .find(|piece| {
+                piece.type_().is_valid()
+                    && piece.color() == color
+                    && piece.can_attack(position, self.arr)
+            })
             .is_some()
     }
 
@@ -332,8 +339,10 @@ impl Board {
             _ => None,
         };
         let mut possible_moves = Vec::with_capacity(256);
-        for piece in self.iter_pieces()
-            .filter(|piece| piece.color() == color && piece.type_().is_valid()) {
+        for piece in self
+            .iter_pieces()
+            .filter(|piece| piece.color() == color && piece.type_().is_valid())
+        {
             match piece.type_() {
                 // Special cases
                 PieceType::Pawn => {
@@ -350,11 +359,7 @@ impl Board {
                             if !promotion {
                                 Move::QuietMove(piece.clone(), front_pos)
                             } else {
-                                Move::PromotionQuiet(
-                                    piece.clone(),
-                                    front_pos,
-                                    PieceType::Invalid,
-                                )
+                                Move::PromotionQuiet(piece.clone(), front_pos, PieceType::Invalid)
                             }
                         });
                     }
@@ -365,9 +370,7 @@ impl Board {
                             continue;
                         }
                         let cell = self.arr[pos as usize];
-                        if cell != 0x00
-                            && Color::from_byte(cell) != color
-                        {
+                        if cell != 0x00 && Color::from_byte(cell) != color {
                             possible_moves.push({
                                 let target = Piece::from_code(cell, pos);
                                 if !promotion {
@@ -391,17 +394,17 @@ impl Board {
                     }
                     // enpassant
                     if let Some(pawn) = &enpassant_pawn {
-                        if pawn.position.abs_diff(piece.position) == 0x01
-                            && pawn.color() != color
-                        {
+                        if pawn.position.abs_diff(piece.position) == 0x01 && pawn.color() != color {
                             possible_moves.push(Move::EnPassantCapture(piece, pawn.clone()))
                         }
                     }
                 }
                 PieceType::Knight => {
-                    for pos in KNIGHT_MOVES.iter()
+                    for pos in KNIGHT_MOVES
+                        .iter()
                         .map(|off| off.wrapping_add(piece.position))
-                        .filter(|pos| is_valid_coord(*pos)) {
+                        .filter(|pos| is_valid_coord(*pos))
+                    {
                         let cell = self.arr[pos as usize];
                         if cell == 0x00 {
                             possible_moves.push(Move::QuietMove(piece.clone(), pos));
@@ -412,9 +415,11 @@ impl Board {
                     }
                 }
                 PieceType::King => {
-                    for pos in KING_MOVES.iter()
+                    for pos in KING_MOVES
+                        .iter()
                         .map(|off| off.wrapping_add(piece.position))
-                        .filter(|pos| is_valid_coord(*pos)) {
+                        .filter(|pos| is_valid_coord(*pos))
+                    {
                         let cell = self.arr[pos as usize];
                         if cell == 0x00 {
                             possible_moves.push(Move::QuietMove(piece.clone(), pos));
@@ -594,7 +599,7 @@ impl Board {
                             let (rank, file): (usize, usize) = unpack_pos(pos);
                             mask[file][rank] = true;
                         }
-                    },
+                    }
                     PieceType::Knight => {
                         for offset in KNIGHT_MOVES {
                             let pos = pos.wrapping_add(*offset);
@@ -604,7 +609,7 @@ impl Board {
                             let (rank, file): (usize, usize) = unpack_pos(pos);
                             mask[file][rank] = true;
                         }
-                    },
+                    }
                     PieceType::King => {
                         for offset in KING_MOVES {
                             let pos = pos.wrapping_add(*offset);
@@ -614,7 +619,7 @@ impl Board {
                             let (rank, file): (usize, usize) = unpack_pos(pos);
                             mask[file][rank] = true;
                         }
-                    },
+                    }
                     // Sliding pieces
                     sliding_piece => {
                         let possible_directions = match sliding_piece {
@@ -671,33 +676,37 @@ impl Board {
                         if !is_valid_coord(pos) {
                             continue;
                         }
-                        self.arr[pos as usize] = PieceFlag::UnknownCellFlag.unset(self.arr[pos as usize]);
+                        self.arr[pos as usize] =
+                            PieceFlag::UnknownCellFlag.unset(self.arr[pos as usize]);
                     }
                     let cell = PieceFlag::UnknownCellFlag.unset(self.arr[front_pos as usize]);
                     self.arr[front_pos as usize] = cell;
                     if cell == 0x00 {
                         let pos = front_pos.wrapping_add(step);
-                        self.arr[pos as usize] = PieceFlag::UnknownCellFlag.unset(self.arr[pos as usize]);
+                        self.arr[pos as usize] =
+                            PieceFlag::UnknownCellFlag.unset(self.arr[pos as usize]);
                     }
-                },
+                }
                 PieceType::Knight => {
                     for offset in KNIGHT_MOVES {
                         let pos = piece.position.wrapping_add(*offset);
                         if !is_valid_coord(pos) {
                             continue;
                         }
-                        self.arr[pos as usize] = PieceFlag::UnknownCellFlag.unset(self.arr[pos as usize]);
+                        self.arr[pos as usize] =
+                            PieceFlag::UnknownCellFlag.unset(self.arr[pos as usize]);
                     }
-                },
+                }
                 PieceType::King => {
                     for offset in KING_MOVES {
                         let pos = piece.position.wrapping_add(*offset);
                         if !is_valid_coord(pos) {
                             continue;
                         }
-                        self.arr[pos as usize] = PieceFlag::UnknownCellFlag.unset(self.arr[pos as usize]);
+                        self.arr[pos as usize] =
+                            PieceFlag::UnknownCellFlag.unset(self.arr[pos as usize]);
                     }
-                },
+                }
                 // Sliding pieces
                 sliding_piece => {
                     let possible_directions = match sliding_piece {
@@ -753,7 +762,8 @@ impl Board {
     }
 
     pub fn iter_pieces<'a>(&'a self) -> impl Iterator<Item = Piece> + 'a {
-        ITER_INDEX.iter()
+        ITER_INDEX
+            .iter()
             .map(|&i| Piece::from_code(self.arr[i], i as u8))
     }
 }
@@ -997,7 +1007,10 @@ impl PieceType {
     }
 
     fn is_valid(&self) -> bool {
-        matches!(self, Self::Pawn | Self::Knight | Self::Bishop | Self::Rook | Self::Queen | Self::King)
+        matches!(
+            self,
+            Self::Pawn | Self::Knight | Self::Bishop | Self::Rook | Self::Queen | Self::King
+        )
     }
 }
 

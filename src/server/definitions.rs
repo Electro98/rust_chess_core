@@ -31,7 +31,7 @@ pub struct OnlineGame {
 pub type Rooms = Arc<RwLock<HashMap<GameId, OnlineGame>>>;
 
 #[derive(Debug, Serialize, Deserialize)]
-pub enum ClientMessage {
+pub enum ServerMessage {
     OpponentConnected,
     OpponentDisconected,
     GameCanceled,
@@ -40,6 +40,9 @@ pub enum ClientMessage {
     NewTurn(Color),
     MakeMove(DefaultMove),
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum ClientMessage {}
 
 impl OnlineGame {
     pub fn get_player(&self, player: Color) -> Option<&Client> {
@@ -57,33 +60,33 @@ impl OnlineGame {
     }
 }
 
-impl From<ClientMessage> for warp::ws::Message {
-    fn from(value: ClientMessage) -> Self {
+impl From<ServerMessage> for warp::ws::Message {
+    fn from(value: ServerMessage) -> Self {
         Self::binary(to_allocvec(&value).unwrap())
     }
 }
-impl From<ClientMessage> for tungstenite::Message {
-    fn from(value: ClientMessage) -> Self {
+impl From<ServerMessage> for tungstenite::Message {
+    fn from(value: ServerMessage) -> Self {
         Self::binary(to_allocvec(&value).unwrap())
     }
 }
 
 #[derive(Debug)]
-pub enum ClientMessageError {
+pub enum ParsingMessageError {
     NonBinaryError,
     PostcardError(postcard::Error),
 }
 
-impl TryFrom<Message> for ClientMessage {
-    type Error = ClientMessageError;
+impl TryFrom<Message> for ServerMessage {
+    type Error = ParsingMessageError;
     fn try_from(value: Message) -> Result<Self, Self::Error> {
         if value.is_binary() {
             match from_bytes(value.as_bytes()) {
                 Ok(result) => Ok(result),
-                Err(err) => Err(ClientMessageError::PostcardError(err)),
+                Err(err) => Err(ParsingMessageError::PostcardError(err)),
             }
         } else {
-            Err(ClientMessageError::NonBinaryError)
+            Err(ParsingMessageError::NonBinaryError)
         }
     }
 }

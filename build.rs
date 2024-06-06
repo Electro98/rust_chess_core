@@ -1,8 +1,7 @@
 use flapigen::{JavaConfig, LanguageConfig};
-use rifgen::{Generator, TypeCases, Language};
-use std::path::Path;
+use rifgen::{Generator, Language, TypeCases};
 use std::env;
-
+use std::path::Path;
 
 fn main() {
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
@@ -21,14 +20,13 @@ fn main() {
 
     if target_os != "android" {
         println!("[INFO]: No glue build is executed!");
-        return
+        return;
     }
     let source_in = source_folder.join("glue.rs.in");
     let source_out = source_folder.join("glue.rs");
     let swig_gen = flapigen::Generator::new(LanguageConfig::JavaConfig(
-        java_config
-            .use_null_annotation_from_package("androidx.annotation".into())
-    )).rustfmt_bindings(true);
+        java_config.use_null_annotation_from_package("androidx.annotation".into()),
+    ))
+    .rustfmt_bindings(true);
     swig_gen.expand("android bindings", source_in, source_out);
 }
- 

@@ -37,26 +37,29 @@ fn is_move_valid(_move: &ImplMove, board: &Board, current_player: Color, default
 }
 
 pub fn ui_board(board: &Board) -> Vec<Vec<Cell>> {
-    (0..8).map(|rank|
-        (0..8).map(|file| compact_pos(rank, file))
-            .map(|pos| (board.inside()[pos as usize], pos))
-            .map(|(code, position)| {
-                if PieceFlag::UnknownCellFlag.is_set(code) {
-                    Cell::Unknown
-                } else if code == 0x00 {
-                    Cell::Empty
-                } else {
-                    let piece = Piece::from_code(code, position);
-                    Cell::Figure(Figure {
-                        kind: piece.type_(),
-                        color: piece.color(),
-                        last_move: false,
-                        impose_check: false,
-                        can_move: true,
-                    })
-                }
-            })
-            .collect())
+    (0..8)
+        .map(|rank| {
+            (0..8)
+                .map(|file| compact_pos(rank, file))
+                .map(|pos| (board.inside()[pos as usize], pos))
+                .map(|(code, position)| {
+                    if PieceFlag::UnknownCellFlag.is_set(code) {
+                        Cell::Unknown
+                    } else if code == 0x00 {
+                        Cell::Empty
+                    } else {
+                        let piece = Piece::from_code(code, position);
+                        Cell::Figure(Figure {
+                            kind: piece.type_(),
+                            color: piece.color(),
+                            last_move: false,
+                            impose_check: false,
+                            can_move: true,
+                        })
+                    }
+                })
+                .collect()
+        })
         .collect()
 }
 
@@ -70,7 +73,13 @@ pub struct DarkGame {
 
 impl DarkGame {
     pub fn new(board: Board, player: Color) -> Self {
-        DarkGame { board, player, last_move: ImplMove::NullMove, finished: false }
+        // we should know last move!
+        DarkGame {
+            board,
+            player,
+            last_move: ImplMove::NullMove,
+            finished: false,
+        }
     }
 }
 
@@ -78,7 +87,7 @@ impl MatchInterface<ImplMove> for DarkGame {
     fn current_board(&self) -> Vec<Vec<Cell>> {
         ui_board(&self.board)
     }
-    
+
     fn cell(&self, rank: usize, file: usize) -> Option<Cell> {
         if file < 8 && rank < 8 {
             let pos = compact_pos(rank as u8, file as u8);
@@ -103,13 +112,20 @@ impl MatchInterface<ImplMove> for DarkGame {
         let piece = self.board.get(rank as u8, file as u8);
         if self.finished
             || matches!(piece.type_(), PieceType::EmptySquare)
-            || piece.color() != self.player {
+            || piece.color() != self.player
+        {
             None
         } else {
-            let moves: Vec<_> = self.board
+            let moves: Vec<_> = self
+                .board
                 .get_possible_moves(self.player, self.last_move.clone(), false)
                 .into_iter()
-                .filter(|_move| _move.piece().map(|move_piece| move_piece == &piece).unwrap_or(false))
+                .filter(|_move| {
+                    _move
+                        .piece()
+                        .map(|move_piece| move_piece == &piece)
+                        .unwrap_or(false)
+                })
                 .filter(|_move| is_move_valid(_move, &self.board, self.player, true))
                 .map(|_move| _move.try_into().unwrap())
                 .collect();
@@ -235,8 +251,7 @@ impl Game {
     }
 
     pub fn vision_board(&self, _player: Color) -> Board {
-        self.board.clone()
-            .hide_and_obstruct(_player)
+        self.board.clone().hide_and_obstruct(_player)
     }
 }
 
@@ -250,7 +265,7 @@ impl MatchInterface<ImplMove> for Game {
     fn current_board(&self) -> Vec<Vec<Cell>> {
         ui_board(&self.board)
     }
-    
+
     fn cell(&self, rank: usize, file: usize) -> Option<Cell> {
         if file < 8 && rank < 8 {
             let pos = compact_pos(rank as u8, file as u8);
@@ -275,13 +290,24 @@ impl MatchInterface<ImplMove> for Game {
         let piece = self.board.get(rank as u8, file as u8);
         if self.finished
             || matches!(piece.type_(), PieceType::EmptySquare)
-            || piece.color() != self.current_player{
+            || piece.color() != self.current_player
+        {
             None
         } else {
-            let moves: Vec<_> = self.board
-                .get_possible_moves(self.current_player, self.last_move().unwrap_or(ImplMove::NullMove), false)
+            let moves: Vec<_> = self
+                .board
+                .get_possible_moves(
+                    self.current_player,
+                    self.last_move().unwrap_or(ImplMove::NullMove),
+                    false,
+                )
                 .into_iter()
-                .filter(|_move| _move.piece().map(|move_piece| move_piece == &piece).unwrap_or(false))
+                .filter(|_move| {
+                    _move
+                        .piece()
+                        .map(|move_piece| move_piece == &piece)
+                        .unwrap_or(false)
+                })
                 .filter(|_move| is_move_valid(_move, &self.board, self.current_player, false))
                 .map(|_move| _move.try_into().unwrap())
                 .collect();

@@ -66,7 +66,7 @@ pub async fn client_connection(ws: WebSocket, rooms: Rooms, room_name: Option<St
         };
         send_message(
             new_client.unwrap(),
-            ClientMessage::GameStateSync(
+            ServerMessage::GameStateSync(
                 room.game.vision_board(player),
                 room.game.current_player(),
                 player,
@@ -78,7 +78,7 @@ pub async fn client_connection(ws: WebSocket, rooms: Rooms, room_name: Option<St
             Message::text(format!("Room: {}", room_name)),
         );
         if let Some(host) = host {
-            send_message(host, ClientMessage::OpponentConnected);
+            send_message(host, ServerMessage::OpponentConnected);
         }
     }
 
@@ -105,15 +105,15 @@ pub async fn client_connection(ws: WebSocket, rooms: Rooms, room_name: Option<St
                 if room.game.game_ended() {
                     brodcast_msg(
                         room,
-                        ClientMessage::GameFinished(room.game.current_player().opposite()),
+                        ServerMessage::GameFinished(room.game.current_player().opposite()),
                     );
                 } else {
-                    brodcast_msg(room, ClientMessage::GameCanceled);
+                    brodcast_msg(room, ServerMessage::GameCanceled);
                 }
                 rooms.remove(&room_name);
                 trc!("Deleted room '{}' with finished game", room_name);
             } else if let Some(client) = room.get_player(player.opposite()) {
-                send_message(client, ClientMessage::OpponentDisconected);
+                send_message(client, ServerMessage::OpponentDisconected);
                 *room.get_player_mut(player) = None;
                 trc!("Player '{}' has been disconnected!", id);
             }
@@ -130,9 +130,9 @@ async fn client_msg(msg: Message, rooms: &Rooms, room: &GameId, _client_id: Uuid
         // TODO: do something
         return;
     }
-    let client_msg: ClientMessage = msg.try_into().unwrap();
+    let client_msg: ServerMessage = msg.try_into().unwrap();
     match client_msg {
-        ClientMessage::MakeMove(_move) => {
+        ServerMessage::MakeMove(_move) => {
             let mut rooms = rooms.write().await;
             if let Some(room) = rooms.get_mut(room) {
                 if room.game.current_player() == player {
@@ -142,7 +142,7 @@ async fn client_msg(msg: Message, rooms: &Rooms, room: &GameId, _client_id: Uuid
                             if let Some(client) = room.get_player(player) {
                                 send_message(
                                     client,
-                                    ClientMessage::GameStateSync(
+                                    ServerMessage::GameStateSync(
                                         room.game.vision_board(player),
                                         player,
                                         player,
@@ -153,7 +153,7 @@ async fn client_msg(msg: Message, rooms: &Rooms, room: &GameId, _client_id: Uuid
                             if let Some(client) = room.get_player(opponent) {
                                 send_message(
                                     client,
-                                    ClientMessage::GameStateSync(
+                                    ServerMessage::GameStateSync(
                                         room.game.vision_board(opponent),
                                         player,
                                         opponent,

@@ -130,8 +130,7 @@ impl App {
                             } else {
                                 match cell {
                                     Cell::Figure(figure) => {
-                                        let moves =
-                                            self.game.possible_moves(rank, file);
+                                        let moves = self.game.possible_moves(rank, file);
                                         self.chosen_figure = if moves.is_some() {
                                             self.selected_cell = Some((rank, file));
                                             Some(figure.clone())

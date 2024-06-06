@@ -25,8 +25,14 @@ fn test_iters() {
             let iter_piece = iter_pieces.next();
             assert!(iter_piece.is_some(), "Iterator is exhausted too soon!");
             assert!(iter_code.is_some(), "Raw iterator is exhausted too soon!");
-            assert!(piece == iter_piece.unwrap(), "Piece is different from for loop!");
-            assert!(code == iter_code.unwrap(), "Code is different from for loop!");
+            assert!(
+                piece == iter_piece.unwrap(),
+                "Piece is different from for loop!"
+            );
+            assert!(
+                code == iter_code.unwrap(),
+                "Code is different from for loop!"
+            );
         }
     }
 }
@@ -61,8 +67,16 @@ fn player_board(board: &Board, player: Color) -> Vec<Vec<Cell>> {
 #[test]
 fn obstruction() {
     let board = Board::default();
-    assert!(player_board(&board, Color::White) == ui_board(&board.clone().hide_and_obstruct(Color::White)), "White board are obstructed incorrectly!");
-    assert!(player_board(&board, Color::Black) == ui_board(&board.clone().hide_and_obstruct(Color::Black)), "Black board are obstructed incorrectly!");
+    assert!(
+        player_board(&board, Color::White)
+            == ui_board(&board.clone().hide_and_obstruct(Color::White)),
+        "White board are obstructed incorrectly!"
+    );
+    assert!(
+        player_board(&board, Color::Black)
+            == ui_board(&board.clone().hide_and_obstruct(Color::Black)),
+        "Black board are obstructed incorrectly!"
+    );
 }
 
 #[test]
