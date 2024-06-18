@@ -37,12 +37,13 @@ pub enum ServerMessage {
     GameCanceled,
     GameFinished(Color),
     GameStateSync(Board, Color, Color, bool),
-    NewTurn(Color),
-    MakeMove(DefaultMove),
+    RoomId(String),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub enum ClientMessage {}
+pub enum ClientMessage {
+    MakeMove(DefaultMove),
+}
 
 impl OnlineGame {
     pub fn get_player(&self, player: Color) -> Option<&Client> {
@@ -65,8 +66,8 @@ impl From<ServerMessage> for warp::ws::Message {
         Self::binary(to_allocvec(&value).unwrap())
     }
 }
-impl From<ServerMessage> for tungstenite::Message {
-    fn from(value: ServerMessage) -> Self {
+impl From<ClientMessage> for tungstenite::Message {
+    fn from(value: ClientMessage) -> Self {
         Self::binary(to_allocvec(&value).unwrap())
     }
 }
@@ -77,11 +78,25 @@ pub enum ParsingMessageError {
     PostcardError(postcard::Error),
 }
 
-impl TryFrom<Message> for ServerMessage {
+impl TryFrom<tungstenite::Message> for ServerMessage {
     type Error = ParsingMessageError;
-    fn try_from(value: Message) -> Result<Self, Self::Error> {
+    fn try_from(value: tungstenite::Message) -> Result<Self, Self::Error> {
         if value.is_binary() {
-            match from_bytes(value.as_bytes()) {
+            match from_bytes(&value.into_data()) {
+                Ok(result) => Ok(result),
+                Err(err) => Err(ParsingMessageError::PostcardError(err)),
+            }
+        } else {
+            Err(ParsingMessageError::NonBinaryError)
+        }
+    }
+}
+
+impl TryFrom<warp::ws::Message> for ClientMessage {
+    type Error = ParsingMessageError;
+    fn try_from(value: warp::ws::Message) -> Result<Self, Self::Error> {
+        if value.is_binary() {
+            match from_bytes(&value.into_bytes()) {
                 Ok(result) => Ok(result),
                 Err(err) => Err(ParsingMessageError::PostcardError(err)),
             }

@@ -1,6 +1,6 @@
 use std::sync::mpsc;
 
-use log::{debug, warn};
+use log::{debug, info, warn};
 use url::Url;
 
 use crate::{
@@ -9,9 +9,10 @@ use crate::{
     Color, DarkGame,
 };
 
-type BackgroudThread = std::thread::JoinHandle<()>;
+pub type BackgroundThread = std::thread::JoinHandle<()>;
 
-#[derive(Debug)]
+#[rifgen::rifgen_attr::generate_interface]
+#[derive(Debug, Clone, Copy)]
 pub enum MoveState {
     MyMove,
     MoveValidation,
@@ -22,16 +23,16 @@ pub enum MoveState {
 pub struct Unconnected;
 #[derive(Debug)]
 pub struct Connecting {
-    background_thread: BackgroudThread,
+    background_thread: BackgroundThread,
 }
 #[derive(Debug)]
 pub struct WaitingOpponent {
-    background_thread: BackgroudThread,
+    background_thread: BackgroundThread,
     pub game: DarkGame,
 }
 #[derive(Debug)]
 pub struct GameInProgress {
-    background_thread: BackgroudThread,
+    background_thread: BackgroundThread,
     pub game: DarkGame,
     pub state: MoveState,
     pub opponent_connected: bool,
@@ -75,7 +76,7 @@ auto_from!(OnlineMatchState, Canceled);
 auto_from!(OnlineMatchState, Finished);
 
 impl Unconnected {
-    pub fn connect(self, background_thread: BackgroudThread) -> Connecting {
+    pub fn connect(self, background_thread: BackgroundThread) -> Connecting {
         Connecting { background_thread }
     }
 }
@@ -87,7 +88,7 @@ impl Default for OnlineMatchState {
 }
 
 impl OnlineMatchState {
-    fn background_thread(self) -> Option<BackgroudThread> {
+    fn background_thread(self) -> Option<BackgroundThread> {
         match self {
             OnlineMatchState::InvalidDummy => unreachable!(),
             OnlineMatchState::Unconnected(_) => None,
@@ -158,6 +159,13 @@ impl OnlineMatchState {
                     you,
                     opponent_connected,
                 )
+            }
+            (state, ServerMessage::RoomId(id)) => {
+                info!(
+                    "Unhandled room id message! Assuming debug purpose. Id: {}",
+                    id
+                );
+                state
             }
             (state, msg) => {
                 warn!("Invalid combination of message and state!");

@@ -23,6 +23,8 @@ mod glue;
 pub use crate::android_bridge::*;
 #[cfg(target_os = "android")]
 pub use crate::glue::*;
+#[cfg(target_os = "android")]
+pub use crate::online_game::MoveState;
 
 #[cfg(target_os = "android")]
 #[no_mangle]

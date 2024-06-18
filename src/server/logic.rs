@@ -75,7 +75,7 @@ pub async fn client_connection(ws: WebSocket, rooms: Rooms, room_name: Option<St
         );
         send_message(
             new_client.unwrap(),
-            Message::text(format!("Room: {}", room_name)),
+            ServerMessage::RoomId(room_name.clone()),
         );
         if let Some(host) = host {
             send_message(host, ServerMessage::OpponentConnected);
@@ -130,9 +130,9 @@ async fn client_msg(msg: Message, rooms: &Rooms, room: &GameId, _client_id: Uuid
         // TODO: do something
         return;
     }
-    let client_msg: ServerMessage = msg.try_into().unwrap();
+    let client_msg: ClientMessage = msg.try_into().unwrap();
     match client_msg {
-        ServerMessage::MakeMove(_move) => {
+        ClientMessage::MakeMove(_move) => {
             let mut rooms = rooms.write().await;
             if let Some(room) = rooms.get_mut(room) {
                 if room.game.current_player() == player {

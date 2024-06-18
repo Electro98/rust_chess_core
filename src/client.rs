@@ -7,10 +7,13 @@ use std::{
     time::Duration,
 };
 
-use chess_engine::online_game::{MoveState, OnlineMatchState, Unconnected, Connecting, Canceled};
 use chess_engine::server::definitions::ServerMessage;
 use chess_engine::{
     engine::Board, Cell as FieldCell, Color, DarkGame, DefaultMove, Game, MatchInterface,
+};
+use chess_engine::{
+    online_game::{Canceled, Connecting, MoveState, OnlineMatchState, Unconnected},
+    server::definitions::ClientMessage,
 };
 use eframe::egui::{self, Vec2};
 use futures::{FutureExt, StreamExt};
@@ -27,7 +30,7 @@ pub use log::{debug as debg, error as err, info as inf, trace as trc, warn as wr
 
 struct OnlineClient {
     pub online_match: Arc<Mutex<OnlineMatchState>>,
-    tx: Option<mpsc::Sender<ServerMessage>>,
+    tx: Option<mpsc::Sender<ClientMessage>>,
 }
 
 impl Default for OnlineClient {
@@ -40,7 +43,7 @@ fn start_connection(
     state: Unconnected,
     url: Url,
     online_match: Arc<Mutex<OnlineMatchState>>,
-    tx: mpsc::Receiver<ServerMessage>,
+    tx: mpsc::Receiver<ClientMessage>,
 ) -> Connecting {
     state.connect(std::thread::spawn(move || {
         let result = tokio::runtime::Builder::new_current_thread()
@@ -90,14 +93,14 @@ impl OnlineClient {
             old_value
         };
     }
-    fn send_move(&self, _move: DefaultMove) -> Result<bool, SendError<ServerMessage>> {
+    fn send_move(&self, _move: DefaultMove) -> Result<bool, SendError<ClientMessage>> {
         let state = &*self.online_match.lock().unwrap();
         match state {
             OnlineMatchState::GameInProgress(game) if matches!(game.state, MoveState::MyMove) => {
                 self.tx
                     .as_ref()
                     .expect("Sender is not initialized, but waiting for player to move?!")
-                    .send(ServerMessage::MakeMove(_move))
+                    .send(ClientMessage::MakeMove(_move))
                     .map(|_| true)
             }
             state => {
@@ -118,7 +121,7 @@ impl OnlineClient {
 async fn game_client(
     url: Url,
     match_state: &Arc<Mutex<OnlineMatchState>>,
-    tx: mpsc::Receiver<ServerMessage>,
+    tx: mpsc::Receiver<ClientMessage>,
 ) -> Result<(), tungstenite::Error> {
     use tokio_stream::StreamExt;
     let (socket, _) = tokio_tungstenite::connect_async(url).await?;
@@ -159,7 +162,9 @@ async fn game_client(
                 let state = &mut *match_state.lock().unwrap();
                 let old_state = std::mem::replace(state, OnlineMatchState::InvalidDummy);
                 *state = match old_state {
-                    OnlineMatchState::GameInProgress(mut game) if matches!(game.state, MoveState::MyMove) => {
+                    OnlineMatchState::GameInProgress(mut game)
+                        if matches!(game.state, MoveState::MyMove) =>
+                    {
                         game.state = MoveState::MoveValidation;
                         game.into()
                     }

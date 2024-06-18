@@ -35,6 +35,23 @@ foreign_class!(
         }
     }
 );
+foreign_enum!(
+	enum GlobalMatchState {
+		Error = GlobalMatchState::Error,
+		Unconnected = GlobalMatchState::Unconnected,
+		Connecting = GlobalMatchState::Connecting,
+		WaitingOpponent = GlobalMatchState::WaitingOpponent,
+		GameInProgress = GlobalMatchState::GameInProgress,
+		Canceled = GlobalMatchState::Canceled,
+		Finished = GlobalMatchState::Finished,
+	}
+);
+foreign_callback!(
+	callback StateObserver {
+		self_type StateObserver;
+		onStateChanged = StateObserver::on_state_changed(& self , state : GlobalMatchState);
+	}
+);
 
 foreign_enum!(
 	enum Color {
@@ -61,6 +78,13 @@ foreign_enum!(
 		MoveBlack = GameStatus::MoveBlack,
 		DistantMoveWhite = GameStatus::DistantMoveWhite,
 		DistantMoveBlack = GameStatus::DistantMoveBlack,
+	}
+);
+foreign_enum!(
+	enum MoveState {
+		MyMove = MoveState::MyMove,
+		MoveValidation = MoveState::MoveValidation,
+		OpponentMove = MoveState::OpponentMove,
 	}
 );
 
@@ -96,6 +120,21 @@ foreign_class!(
 		fn WrapperGame::current_player(& self)->Color; alias currentPlayer;
 		fn WrapperGame::checked(& self)->bool; alias checked;
 		fn WrapperGame::game_ended(& self)->bool; alias gameEnded;
+	}
+);
+foreign_class!(
+	class OnlineGame {
+		self_type OnlineGame;
+		constructor OnlineGame::new()->OnlineGame;
+		fn OnlineGame::install_observer(& mut self , observer : Box < dyn StateObserver >); alias installObserver;
+		fn OnlineGame::connect(& mut self , url : String); alias connect;
+		fn OnlineGame::send_move(& mut self , _move : WrapperMove); alias sendMove;
+		fn OnlineGame::check_state(& mut self); alias checkState;
+		fn OnlineGame::player(& self)->Color; alias player;
+		fn OnlineGame::current_player(& self)->Color; alias currentPlayer;
+		fn OnlineGame::sub_state(& self)->MoveState; alias subState;
+		fn OnlineGame::possible_moves(& self , rank : usize , file : usize)->Moves; alias possibleMoves;
+		fn OnlineGame::board(& self)->Cells; alias board;
 	}
 );
 
