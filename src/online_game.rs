@@ -11,7 +11,6 @@ use crate::{
 
 pub type BackgroundThread = std::thread::JoinHandle<()>;
 
-#[rifgen::rifgen_attr::generate_interface]
 #[derive(Debug, Clone, Copy)]
 pub enum MoveState {
     MyMove,
