@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use std::default;
 use std::fmt::Display;
 use std::{fmt::Debug, iter::zip};
 
@@ -105,9 +106,81 @@ impl Board {
         }
     }
 
-    #[allow(non_snake_case)]
-    pub fn from_FEN(fen: &str) -> (Board, Color, Move) {
-        todo!()
+    pub fn from_fen(fen: &str) -> Result<(Board, Color, Move), String> {
+        let mut chars = fen.chars();
+        let mut board = Board::new();
+        // Board portion
+        for rank in 0..8 {
+            let mut file = 0;
+            while let Some(letter) = chars.next() {
+                if let Some(num) = letter.to_digit(10) {
+                    file += num;
+                    continue;
+                }
+                if file == 8 {
+                    break;
+                }
+                let color: Color = if letter.is_uppercase() { Color::White } else { Color::Black };
+                let piece: PieceType = match letter {
+                    'p' | 'P' => PieceType::Pawn,
+                    'r' | 'R' => PieceType::Rook,
+                    'n' | 'N' => PieceType::Knight,
+                    'b' | 'B' => PieceType::Bishop,
+                    'q' | 'Q' => PieceType::Queen,
+                    'k' | 'K' => PieceType::King,
+                    // This point should not be reached,
+                    //  because final iteration of loop will consume '/' or whitespace
+                    // '/' => break,
+                    _ => return Err(format!("Unexpected symbol '{letter}' during parsing board layout")),
+                };
+                let pos = compact_pos(rank as u8, file as u8);
+                board.arr[pos as usize] = piece as u8 | color as u8;
+                file += 1;
+            }
+        }
+        // Active player
+        let player = match chars.next() {
+            Some('w') => Color::White,
+            Some('b') => Color::Black,
+            Some(letter) => return Err(format!("Unexpected symbol '{letter}' during parsing active player")),
+            None => return Err("String exhausted too early".to_string()),
+        };
+        chars.next();
+        // Castling availability
+        let mut rights = 0u8;
+        let mut rights_color = Color::White;
+        let update_king = |board: &mut Board, color: Color, rights: u8| {
+            let king = if let Some(king) = board.iter_pieces().find(|piece| piece.type_() == PieceType::King && piece.color() == color) {
+                king
+            } else {
+                return Err(format!("Can't find {color} king"));
+            };
+            board.arr[king.position()] = king.code | rights;
+            Ok(())
+        };
+        while let Some(letter) = chars.next() {
+            if letter.is_lowercase() && rights_color == Color::White {
+                update_king(&mut board, rights_color, rights)?;
+                rights = 0;
+                rights_color = Color::Black;
+            }
+            match letter {
+                'Q' | 'q' => rights |= PieceFlag::CanCastleQueenSide as u8,
+                'K' | 'k' => rights |= PieceFlag::CanCastleKingSide as u8,
+                '-' => continue,
+                ' ' => break,
+                _ => return Err(format!("Unexpected symbol '{letter}' during parsing castling rights")),
+            }
+        }
+        update_king(&mut board, rights_color, rights)?;
+        // En Passant target square
+        let last_move = match chars.next() {
+            Some('-') => Move::NullMove,
+            Some(letter) => todo!("Parse algebraic notation"),
+            None => return Err("FEN string ended too early".to_string()),
+        };
+        // The rest is currently ignored
+        Ok((board, player, last_move))
     }
 
     pub fn inside(&self) -> &[u8; 128] {
@@ -765,6 +838,20 @@ impl Board {
         ITER_INDEX
             .iter()
             .map(|&i| Piece::from_code(self.arr[i], i as u8))
+    }
+
+    pub fn compress(&self) -> [u32; 8] {
+        let mut compressed_board = [0; 8];
+        for file in 0..8u8 {
+            let mut row: u32 = 0;
+            for rank in 0..8u8 {
+                let pos = (rank << 4 | file) as usize;
+                let cell = self.arr[pos] & 0x80 >> 4 | self.arr[pos] & 0x05;
+                row |= (cell as u32) << (rank * 4);
+            }
+            compressed_board[file as usize] = row;
+        }
+        compressed_board
     }
 }
 

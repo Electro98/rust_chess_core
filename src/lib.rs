@@ -5,7 +5,7 @@ pub mod server;
 // module re-exports
 pub use core::*;
 
-pub use core::definitions::{Cell, DefaultMove, Figure, GameState, MatchInterface};
+pub use core::definitions::{Cell, DefaultExternalMove, Figure, GameState, MatchInterface};
 pub use core::engine::{Color, PieceType};
 pub use core::game::{DarkGame, Game};
 

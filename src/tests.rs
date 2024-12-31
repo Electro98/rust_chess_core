@@ -1,4 +1,4 @@
-use engine::Piece;
+use engine::{Move, Piece};
 use game::ui_board;
 
 use self::engine::Board;
@@ -91,8 +91,93 @@ fn random_moves_game() {
 }
 
 #[test]
-fn move_generation() {
-    let fen_string = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-    let (board, player, last_move) = Board::from_FEN(fen_string);
+fn fen_parsing() {
+    const FENs: [&str; 1] = [
+        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+    ];
+    for setup in FENs {
+        let (_board, _, _) = Board::from_fen(setup).unwrap();
+    }
+}
+
+#[derive(Debug, Default)]
+struct PERFResult {
+    all: usize,
+    captures: usize,
+    en_passaunt: usize,
+    castles: usize,
+    promotions: usize,
+    checks: usize,
+    // discovery_checks: usize,
+    // double_checks: usize,
+    checkmates: usize,
+}
+
+impl PERFResult {
+    fn combine(self, other: PERFResult) -> Self {
+        PERFResult {
+            all: self.all + other.all,
+            captures: self.captures + other.captures,
+            en_passaunt: self.en_passaunt + other.en_passaunt,
+            castles: self.castles + other.castles,
+            promotions: self.promotions + other.promotions,
+            checks: self.checks + other.checks,
+            checkmates: self.checkmates + other.checkmates,
+        }
+    }
+}
+
+fn count_perf_result(moves: Vec<Move>) -> PERFResult {
+    let mut result = PERFResult {
+        all: moves.len(),
+        ..Default::default()
+    };
+    for _move in moves {
+        match _move {
+            Move::NullMove => panic!("Generator created a NULL move."),
+            Move::QuietMove(_, _) => (),
+            Move::Capture(_, _) => result.captures += 1,
+            Move::Castling(_, _, _) => result.castles += 1,
+            Move::PromotionQuiet(_, _, _) => result.promotions += 1,
+            Move::PromotionCapture(_, _, _) => {
+                result.captures += 1;
+                result.promotions += 1;
+            },
+            Move::PawnDoublePush(_, _) => (),
+            Move::EnPassantCapture(_, _) => result.en_passaunt += 1,
+        }
+    }
+    result
+}
+
+fn perf_test_step(board: &Board, player: Color, last_move: Move, depth: usize) -> PERFResult {
     let possible_moves = board.get_possible_moves(player, last_move, true);
+    if depth == 0 {
+        PERFResult { all: 1, ..Default::default() }
+    } else if depth == 1 {
+        count_perf_result(possible_moves)
+    } else {
+        possible_moves.into_iter().map(|_move| {
+            let mut board = board.clone();
+            board.execute(_move.clone());
+            perf_test_step(&board, player.opposite(), _move, depth - 1)
+        }).reduce(PERFResult::combine).expect("Result should exist")
+    }
+}
+
+#[test]
+fn move_generation() {
+    let PERF_SETUP: [(&str, Vec<usize>); 1] = [
+        ("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", vec![1, 20, 400, 8902, 197_281, 4_865_609, 119_060_324, 3_195_901_860])
+    ];
+    for (fen_string, results) in PERF_SETUP {
+        let (board, player, last_move) = Board::from_fen(fen_string).unwrap();
+        for (depth, expected) in results.iter().enumerate() {
+            let result = perf_test_step(&board, player, last_move.clone(), depth);
+            let nodes_count = result.all;
+            println!("Step {depth} - Result: {nodes_count} - Expected: {expected}");
+            println!("Details: {result:#?}");
+            assert!(result.all == *expected, "Results don't match up");
+        } 
+    }
 }

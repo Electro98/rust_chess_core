@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::{engine::Board, Color, DefaultMove, Game};
+use crate::{engine::Board, Color, DefaultExternalMove, Game};
 use postcard::{from_bytes, to_allocvec};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::UnboundedSender;
@@ -42,7 +42,7 @@ pub enum ServerMessage {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ClientMessage {
-    MakeMove(DefaultMove),
+    MakeMove(DefaultExternalMove),
 }
 
 impl OnlineGame {

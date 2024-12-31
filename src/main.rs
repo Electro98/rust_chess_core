@@ -1,4 +1,4 @@
-use chess_engine::{Cell, Color, DefaultMove, Figure, Game, MatchInterface};
+use chess_engine::{Cell, Color, DefaultExternalMove, Figure, Game, MatchInterface};
 use eframe::{egui, epaint::Vec2};
 use gui::{background_color, piece_image};
 
@@ -9,7 +9,7 @@ struct App {
     cell_size: f32,
     chosen_figure: Option<Figure>,
     selected_cell: Option<(usize, usize)>,
-    moves: Option<Vec<DefaultMove>>,
+    moves: Option<Vec<DefaultExternalMove>>,
 }
 
 fn main() -> Result<(), eframe::Error> {
@@ -70,7 +70,7 @@ impl eframe::App for App {
 }
 
 impl App {
-    fn grid(&mut self, ui: &mut egui::Ui) -> Option<DefaultMove> {
+    fn grid(&mut self, ui: &mut egui::Ui) -> Option<DefaultExternalMove> {
         let board = self.game.current_board();
         let mut move_to_exec = None;
         egui::Grid::new("main_grid")

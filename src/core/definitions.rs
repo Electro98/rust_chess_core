@@ -24,19 +24,19 @@ pub trait ImplicitMove {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Move<T: ImplicitMove + Serialize> {
+pub struct ExternalMove<T: ImplicitMove + Serialize> {
     pub from: (u32, u32),
     pub to: (u32, u32),
     pub _move: T,
 }
 
-pub type DefaultMove = Move<BaseMove>;
+pub type DefaultExternalMove = ExternalMove<BaseMove>;
 
 pub trait MatchInterface<T: ImplicitMove + for<'a> Deserialize<'a> + Serialize> {
     fn current_board(&self) -> Vec<Vec<Cell>>;
     fn cell(&self, rank: usize, file: usize) -> Option<Cell>;
-    fn possible_moves(&self, rank: usize, file: usize) -> Option<Vec<Move<T>>>;
-    fn execute_move(&mut self, _move: Move<T>) -> GameState;
+    fn possible_moves(&self, rank: usize, file: usize) -> Option<Vec<ExternalMove<T>>>;
+    fn execute_move(&mut self, _move: ExternalMove<T>) -> GameState;
     fn wait_move(&mut self) -> GameState;
     // info
     fn current_player(&self) -> Color;
@@ -54,7 +54,7 @@ pub enum GameState {
 // Implementation block
 // ---
 
-impl<T: ImplicitMove + for<'a> Deserialize<'a> + Serialize> Move<T> {
+impl<T: ImplicitMove + for<'a> Deserialize<'a> + Serialize> ExternalMove<T> {
     pub fn is_promotion(&self) -> bool {
         self._move.promotion()
     }
