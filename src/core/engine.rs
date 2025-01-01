@@ -47,11 +47,12 @@ pub enum CheckType {
 }
 
 impl CheckType {
-    fn direct_check(checked: bool) -> Self {
-        if checked {
-            Self::Direct
-        } else {
-            Self::None
+    fn from_bools(direct: bool, discovered: bool) -> Self {
+        match (direct, discovered) {
+            (true, true) => Self::Double,
+            (true, false) => Self::Direct,
+            (false, true) => Self::Discovered,
+            (false, false) => Self::None,
         }
     }
 }
@@ -819,7 +820,7 @@ impl Game {
     pub fn get_possible_moves(&self, bot: bool) -> Vec<Move> {
         // Check for pawn double push
         let last_move = self.history.last_move();
-        let enpassant_pawn = match last_move.map(|_move| _move.move_type) {
+        let enpassant_pawn = match last_move.as_ref().map(|_move| _move.move_type) {
             Some(MoveType::PawnDoublePush(_)) => Some(last_move.unwrap().piece),
             _ => None,
         };
@@ -866,6 +867,7 @@ impl Game {
                     let promotion = front_pos & 0xf0 == 0 || front_pos & 0xf0 == 0x70;
                     if in_front == 0x00
                         && possible_positions
+                            .as_ref()
                             .map_or(true, |positions| positions.contains(&front_pos))
                     {
                         possible_moves.push({
@@ -876,13 +878,7 @@ impl Game {
                                 } else {
                                     MoveType::PromotionQuiet(front_pos, PieceType::Invalid)
                                 },
-                                check: CheckType::direct_check(enemy_king.map_or(
-                                    false,
-                                    |enemy_king| {
-                                        Piece::from_code(piece.code, front_pos)
-                                            .can_attack(enemy_king.position, self.board.arr)
-                                    },
-                                )),
+                                check: CheckType::None,
                             }
                         });
                     }
@@ -915,7 +911,9 @@ impl Game {
                     if !PieceFlag::Moved.is_set(piece.code) && in_front == 0x00 {
                         let pos = front_pos.wrapping_add(step);
                         if self.board.arr[pos as usize] == 0x00
-                            && possible_positions.map_or(true, |positions| positions.contains(&pos))
+                            && possible_positions
+                                .as_ref()
+                                .map_or(true, |positions| positions.contains(&pos))
                         {
                             possible_moves.push(Move {
                                 piece,
@@ -1028,6 +1026,7 @@ impl Game {
                             let cell = self.board.arr[pos as usize];
                             if cell == 0x00
                                 && possible_positions
+                                    .as_ref()
                                     .map_or(true, |possitions| possitions.contains(&pos))
                             {
                                 possible_moves.push(Move {
@@ -1052,31 +1051,66 @@ impl Game {
                 }
             }
         }
-        // TODO: Find discovery checks
         if bot {
             for idx in 0..possible_moves.len() {
-                possible_moves[idx] = match possible_moves[idx].clone() {
-                    Move::PromotionQuiet(pawn, pos, _) => {
+                let piece = possible_moves[idx].piece;
+                possible_moves[idx].move_type = match possible_moves[idx].move_type.clone() {
+                    MoveType::PromotionQuiet(pos, _) => {
                         for _type in [PieceType::Knight, PieceType::Rook, PieceType::Bishop] {
-                            possible_moves.push(Move::PromotionQuiet(pawn.clone(), pos, _type));
+                            possible_moves.push(Move {
+                                piece,
+                                move_type: MoveType::PromotionQuiet(pos, _type),
+                                check: CheckType::None,
+                            });
                         }
-                        Move::PromotionQuiet(pawn, pos, PieceType::Queen)
+                        MoveType::PromotionQuiet(pos, PieceType::Queen)
                     }
-                    Move::PromotionCapture(pawn, piece, _) => {
+                    MoveType::PromotionCapture(target, _) => {
                         for _type in [PieceType::Knight, PieceType::Rook, PieceType::Bishop] {
-                            possible_moves.push(Move::PromotionCapture(
-                                pawn.clone(),
-                                piece.clone(),
-                                _type,
-                            ));
+                            possible_moves.push(Move {
+                                piece,
+                                move_type: MoveType::PromotionCapture(target, _type),
+                                check: CheckType::None,
+                            });
                         }
-                        Move::PromotionCapture(pawn, piece, PieceType::Queen)
+                        MoveType::PromotionCapture(target, PieceType::Queen)
                     }
                     _move => _move,
                 }
             }
         }
-        todo!()
+        // Find discovery checks and direct checks
+        // This can be not executed on dark chess client
+        if let Some(enemy_king) = enemy_king {
+            let pinned_pieces = self.board.count_pinned_pieces(enemy_king);
+            for _move in possible_moves.iter_mut() {
+                let direct_check = match _move.move_type {
+                    MoveType::PromotionQuiet(_, new_type)
+                    | MoveType::PromotionCapture(_, new_type) => {
+                        let piece = _move.piece();
+                        !matches!(new_type, PieceType::Invalid)
+                            && Piece::from_code(
+                                piece.color() as u8 | new_type as u8,
+                                _move.end_position(),
+                            )
+                            .can_attack(enemy_king.position, self.board.arr)
+                    }
+                    _ => _move
+                        .piece()
+                        .can_attack(enemy_king.position, self.board.arr),
+                };
+                let discovered_check = pinned_pieces
+                    .iter()
+                    .find(|(piece, _)| piece == _move.piece())
+                    .map_or(false, |(piece, attacker)| {
+                        between(enemy_king.position, attacker.position)
+                            .find(|pos| *pos == _move.end_position())
+                            .is_none()
+                    });
+                _move.check = CheckType::from_bools(direct_check, discovered_check);
+            }
+        }
+        possible_moves
     }
 }
 
