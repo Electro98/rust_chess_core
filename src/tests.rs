@@ -92,9 +92,7 @@ fn random_moves_game() {
 
 #[test]
 fn fen_parsing() {
-    const FENs: [&str; 1] = [
-        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-    ];
+    const FENs: [&str; 1] = ["rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"];
     for setup in FENs {
         let (_board, _, _) = Board::from_fen(setup).unwrap();
     }
@@ -142,7 +140,7 @@ fn count_perf_result(moves: Vec<Move>) -> PERFResult {
             Move::PromotionCapture(_, _, _) => {
                 result.captures += 1;
                 result.promotions += 1;
-            },
+            }
             Move::PawnDoublePush(_, _) => (),
             Move::EnPassantCapture(_, _) => result.en_passaunt += 1,
         }
@@ -153,23 +151,40 @@ fn count_perf_result(moves: Vec<Move>) -> PERFResult {
 fn perf_test_step(board: &Board, player: Color, last_move: Move, depth: usize) -> PERFResult {
     let possible_moves = board.get_possible_moves(player, last_move, true);
     if depth == 0 {
-        PERFResult { all: 1, ..Default::default() }
+        PERFResult {
+            all: 1,
+            ..Default::default()
+        }
     } else if depth == 1 {
         count_perf_result(possible_moves)
     } else {
-        possible_moves.into_iter().map(|_move| {
-            let mut board = board.clone();
-            board.execute(_move.clone());
-            perf_test_step(&board, player.opposite(), _move, depth - 1)
-        }).reduce(PERFResult::combine).expect("Result should exist")
+        possible_moves
+            .into_iter()
+            .map(|_move| {
+                let mut board = board.clone();
+                board.execute(_move.clone());
+                perf_test_step(&board, player.opposite(), _move, depth - 1)
+            })
+            .reduce(PERFResult::combine)
+            .expect("Result should exist")
     }
 }
 
 #[test]
 fn move_generation() {
-    let PERF_SETUP: [(&str, Vec<usize>); 1] = [
-        ("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", vec![1, 20, 400, 8902, 197_281, 4_865_609, 119_060_324, 3_195_901_860])
-    ];
+    let PERF_SETUP: [(&str, Vec<usize>); 1] = [(
+        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        vec![
+            1,
+            20,
+            400,
+            8902,
+            197_281,
+            4_865_609,
+            119_060_324,
+            3_195_901_860,
+        ],
+    )];
     for (fen_string, results) in PERF_SETUP {
         let (board, player, last_move) = Board::from_fen(fen_string).unwrap();
         for (depth, expected) in results.iter().enumerate() {
@@ -178,6 +193,6 @@ fn move_generation() {
             println!("Step {depth} - Result: {nodes_count} - Expected: {expected}");
             println!("Details: {result:#?}");
             assert!(result.all == *expected, "Results don't match up");
-        } 
+        }
     }
 }
