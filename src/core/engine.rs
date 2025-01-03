@@ -1,10 +1,8 @@
 #![allow(dead_code)]
 
-use std::default;
 use std::fmt::Display;
 use std::{fmt::Debug, iter::zip};
 
-use log::trace;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, Bytes};
 
@@ -81,6 +79,14 @@ impl Move {
             MoveType::EnPassantCapture(piece) => piece.position() as u8,
         }
     }
+
+    pub fn move_type(&self) -> &MoveType {
+        &self.move_type
+    }
+    
+    pub fn check(&self) -> CheckType {
+        self.check
+    }
 }
 
 impl ImplicitMove for Move {
@@ -126,83 +132,6 @@ impl Board {
             ]
         }
     }
-
-    // pub fn from_fen(fen: &str) -> Result<(Board, Color, Move), String> {
-    //     let mut chars = fen.chars();
-    //     let mut board = Board::new();
-    //     // Board portion
-    //     for rank in 0..8 {
-    //         let mut file = 0;
-    //         while let Some(letter) = chars.next() {
-    //             if let Some(num) = letter.to_digit(10) {
-    //                 file += num;
-    //                 continue;
-    //             }
-    //             if file == 8 {
-    //                 break;
-    //             }
-    //             let color: Color = if letter.is_uppercase() { Color::White } else { Color::Black };
-    //             let piece: PieceType = match letter {
-    //                 'p' | 'P' => PieceType::Pawn,
-    //                 'r' | 'R' => PieceType::Rook,
-    //                 'n' | 'N' => PieceType::Knight,
-    //                 'b' | 'B' => PieceType::Bishop,
-    //                 'q' | 'Q' => PieceType::Queen,
-    //                 'k' | 'K' => PieceType::King,
-    //                 // This point should not be reached,
-    //                 //  because final iteration of loop will consume '/' or whitespace
-    //                 // '/' => break,
-    //                 _ => return Err(format!("Unexpected symbol '{letter}' during parsing board layout")),
-    //             };
-    //             let pos = compact_pos(rank as u8, file as u8);
-    //             board.arr[pos as usize] = piece as u8 | color as u8;
-    //             file += 1;
-    //         }
-    //     }
-    //     // Active player
-    //     let player = match chars.next() {
-    //         Some('w') => Color::White,
-    //         Some('b') => Color::Black,
-    //         Some(letter) => return Err(format!("Unexpected symbol '{letter}' during parsing active player")),
-    //         None => return Err("String exhausted too early".to_string()),
-    //     };
-    //     chars.next();
-    //     // Castling availability
-    //     let mut rights = 0u8;
-    //     let mut rights_color = Color::White;
-    //     let update_king = |board: &mut Board, color: Color, rights: u8| {
-    //         let king = if let Some(king) = board.iter_pieces().find(|piece| piece.type_() == PieceType::King && piece.color() == color) {
-    //             king
-    //         } else {
-    //             return Err(format!("Can't find {color} king"));
-    //         };
-    //         board.arr[king.position()] = king.code | rights;
-    //         Ok(())
-    //     };
-    //     while let Some(letter) = chars.next() {
-    //         if letter.is_lowercase() && rights_color == Color::White {
-    //             update_king(&mut board, rights_color, rights)?;
-    //             rights = 0;
-    //             rights_color = Color::Black;
-    //         }
-    //         match letter {
-    //             'Q' | 'q' => rights |= PieceFlag::CanCastleQueenSide as u8,
-    //             'K' | 'k' => rights |= PieceFlag::CanCastleKingSide as u8,
-    //             '-' => continue,
-    //             ' ' => break,
-    //             _ => return Err(format!("Unexpected symbol '{letter}' during parsing castling rights")),
-    //         }
-    //     }
-    //     update_king(&mut board, rights_color, rights)?;
-    //     // En Passant target square
-    //     let last_move = match chars.next() {
-    //         Some('-') => Move::NullMove,
-    //         Some(letter) => todo!("Parse algebraic notation"),
-    //         None => return Err("FEN string ended too early".to_string()),
-    //     };
-    //     // The rest is currently ignored
-    //     Ok((board, player, last_move))
-    // }
 
     pub fn inside(&self) -> &[u8; 128] {
         &self.arr
@@ -777,7 +706,8 @@ const QUEEN_DIR: &[u8] = &[0x11, 0x0f, 0xef, 0xf1, 0x10, 0xff, 0xf0, 0x01];
 const KING_MOVES: &[u8] = QUEEN_DIR;
 const KNIGHT_MOVES: &[u8] = &[0x12, 0x21, 0x1f, 0x0e, 0xee, 0xdf, 0xe1, 0xf2];
 
-enum GameHistory {
+#[derive(Clone)]
+pub enum GameHistory {
     LastMove(Option<Move>),
     FullHistory(Vec<Move>),
 }
@@ -789,7 +719,7 @@ impl Default for GameHistory {
 }
 
 impl GameHistory {
-    fn last_move(&self) -> Option<Move> {
+    pub fn last_move(&self) -> Option<Move> {
         match self {
             GameHistory::LastMove(last_move) => last_move.clone(),
             GameHistory::FullHistory(moves) => moves.last().cloned(),
@@ -816,7 +746,121 @@ pub struct Game {
     history: GameHistory,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum GameEndState {
+    CheckMate,
+    DrawStalemate,
+    DrawTreefoldRepetion,
+    DrawFiftyMoveRule,
+    DrawInsufficientMaterial,
+}
+
 impl Game {
+    pub fn from_fen(fen: &str) -> Result<Game, String> {
+        let mut chars = fen.chars();
+        let mut board = Board::new();
+        // Board portion
+        for rank in 0..8 {
+            let mut file = 0;
+            while let Some(letter) = chars.next() {
+                if let Some(num) = letter.to_digit(10) {
+                    file += num;
+                    continue;
+                }
+                if file == 8 {
+                    break;
+                }
+                let color: Color = if letter.is_uppercase() {
+                    Color::White
+                } else {
+                    Color::Black
+                };
+                let piece: PieceType = match letter {
+                    'p' | 'P' => PieceType::Pawn,
+                    'r' | 'R' => PieceType::Rook,
+                    'n' | 'N' => PieceType::Knight,
+                    'b' | 'B' => PieceType::Bishop,
+                    'q' | 'Q' => PieceType::Queen,
+                    'k' | 'K' => PieceType::King,
+                    // This point should not be reached,
+                    //  because final iteration of loop will consume '/' or whitespace
+                    // '/' => break,
+                    _ => {
+                        return Err(format!(
+                            "Unexpected symbol '{letter}' during parsing board layout"
+                        ))
+                    }
+                };
+                let pos = compact_pos(rank as u8, file as u8);
+                board.arr[pos as usize] = piece as u8 | color as u8;
+                file += 1;
+            }
+        }
+        // Active player
+        let current_player = match chars.next() {
+            Some('w') => Color::White,
+            Some('b') => Color::Black,
+            Some(letter) => {
+                return Err(format!(
+                    "Unexpected symbol '{letter}' during parsing active player"
+                ))
+            }
+            None => return Err("String exhausted too early".to_string()),
+        };
+        chars.next();
+        // Castling availability
+        let mut rights = 0u8;
+        let mut rights_color = Color::White;
+        let update_king = |board: &mut Board, color: Color, rights: u8| {
+            let king = if let Some(king) = board
+                .iter_pieces()
+                .find(|piece| piece.type_() == PieceType::King && piece.color() == color)
+            {
+                king
+            } else {
+                return Err(format!("Can't find {color} king"));
+            };
+            board.arr[king.position()] = king.code | rights;
+            Ok(())
+        };
+        while let Some(letter) = chars.next() {
+            if letter.is_lowercase() && rights_color == Color::White {
+                update_king(&mut board, rights_color, rights)?;
+                rights = 0;
+                rights_color = Color::Black;
+            }
+            match letter {
+                'Q' | 'q' => rights |= PieceFlag::CanCastleQueenSide as u8,
+                'K' | 'k' => rights |= PieceFlag::CanCastleKingSide as u8,
+                '-' => continue,
+                ' ' => break,
+                _ => {
+                    return Err(format!(
+                        "Unexpected symbol '{letter}' during parsing castling rights"
+                    ))
+                }
+            }
+        }
+        update_king(&mut board, rights_color, rights)?;
+        // En Passant target square
+        let last_move = match chars.next() {
+            Some('-') => None,
+            Some(letter) => todo!("Parse algebraic notation"),
+            None => return Err("FEN string ended too early".to_string()),
+        };
+        // The rest is currently ignored
+        Ok(Self {
+            board,
+            current_player,
+            existed_positions: Vec::new(),
+            history: GameHistory::FullHistory(if let Some(last_move) = last_move {
+                vec![last_move]
+            } else {
+                Vec::new()
+            }),
+        })
+    }
+
     pub fn get_possible_moves(&self, bot: bool) -> Vec<Move> {
         // Check for pawn double push
         let last_move = self.history.last_move();
@@ -831,6 +875,7 @@ impl Game {
             .iter_pieces()
             .find(|piece| piece.color() == self.current_player && piece.type_() == PieceType::King)
             .expect("King of current player should be present to make a move");
+        let king_in_check = self.history.last_move().map(|_move| _move.check);
         let pinned_pieces = self.board.count_pinned_pieces(king);
 
         let enemy_king = self
@@ -854,6 +899,10 @@ impl Game {
             } else {
                 (None, None)
             };
+            if matches!(king_in_check, Some(CheckType::Double)) && piece.type_() != PieceType::King
+            {
+                continue;
+            }
             match piece.type_() {
                 // Special cases
                 PieceType::Pawn => {
@@ -962,10 +1011,14 @@ impl Game {
                     }
                 }
                 PieceType::King => {
+                    // This is to prevent king itself from defending some position
+                    let mut kingless_board = self.board.clone();
+                    kingless_board.arr[piece.position as usize] = 0x00;
                     for pos in KING_MOVES
                         .iter()
                         .map(|off| off.wrapping_add(piece.position))
                         .filter(|pos| is_valid_coord(*pos))
+                        .filter(|pos| !kingless_board.is_attacked(*pos, self.current_player.opposite()))
                     {
                         let cell = self.board.arr[pos as usize];
                         if cell == 0x00 {
@@ -1051,6 +1104,40 @@ impl Game {
                 }
             }
         }
+        if matches!(
+            king_in_check,
+            Some(CheckType::Direct) | Some(CheckType::Discovered)
+        ) {
+            let attack_pieces = self
+                .board
+                .who_can_attack(king)
+                .expect("Incorrect check: attacker is not found");
+            assert!(
+                attack_pieces.len() == 1,
+                "There can be only one piece to attack the king"
+            );
+            let attacker = attack_pieces.into_iter().next().unwrap();
+            let possible_positions: Vec<_> = if matches!(
+                attacker.type_(),
+                PieceType::Bishop | PieceType::Queen | PieceType::Rook
+            ) {
+                between(attacker.position, king.position).collect()
+            } else {
+                Vec::new()
+            };
+            possible_moves = possible_moves
+                .into_iter()
+                .filter(|_move| {
+                    if _move.piece().type_() == PieceType::King {
+                        true
+                    } else {
+                        // This If just to make more sense
+                        possible_positions.contains(&_move.end_position())
+                            || _move.end_position() == attacker.position
+                    }
+                })
+                .collect();
+        }
         if bot {
             for idx in 0..possible_moves.len() {
                 let piece = possible_moves[idx].piece;
@@ -1095,14 +1182,13 @@ impl Game {
                             )
                             .can_attack(enemy_king.position, self.board.arr)
                     }
-                    _ => _move
-                        .piece()
+                    _ => Piece::from_code(_move.piece().code, _move.end_position())
                         .can_attack(enemy_king.position, self.board.arr),
                 };
                 let discovered_check = pinned_pieces
                     .iter()
                     .find(|(piece, _)| piece == _move.piece())
-                    .map_or(false, |(piece, attacker)| {
+                    .map_or(false, |(_, attacker)| {
                         between(enemy_king.position, attacker.position)
                             .find(|pos| *pos == _move.end_position())
                             .is_none()
@@ -1111,6 +1197,73 @@ impl Game {
             }
         }
         possible_moves
+    }
+
+    pub fn execute(&mut self, _move: Move, bot: bool) -> Option<GameEndState> {
+        if !bot {
+            // TODO: Recheck promotion moves about king checks
+            todo!()
+        }
+        self.current_player = self.current_player.opposite();
+        self.board.execute(_move.clone());
+        self.history.record(_move.clone());
+        // #[cfg(debug_assertions)]
+        // if !matches!(_move.check, CheckType::None) {
+            // let king = self
+                // .board
+                // .iter_pieces()
+                // .find(|piece| piece.color() == self.current_player && piece.type_() == PieceType::King)
+                // .expect("King of current player should be present to make a move");
+            // let pinned_pieces = self.board.count_pinned_pieces(king);
+            // dbg!(pinned_pieces);
+            // let attackers = self.board.who_can_attack(king);
+            // dbg!(attackers);
+        // }
+        match _move.move_type() {
+            MoveType::QuietMove(_) => {
+                let compressed_board = self.board.compress();
+                if self
+                    .existed_positions
+                    .iter()
+                    .filter(|exboard| *exboard == &compressed_board)
+                    .count()
+                    >= 2
+                {
+                    return Some(GameEndState::DrawTreefoldRepetion);
+                }
+                self.existed_positions.push(compressed_board);
+            }
+            _ => self.existed_positions.clear(),
+        }
+        if self.get_possible_moves(false).is_empty() {
+            match _move.check {
+                CheckType::None => Some(GameEndState::DrawStalemate),
+                _ => Some(GameEndState::CheckMate),
+            }
+        } else {
+            None
+        }
+    }
+
+    pub fn light_clone(&self) -> Self {
+        Self {
+            board: self.board.clone(),
+            current_player: self.current_player,
+            existed_positions: self.existed_positions.clone(),
+            history: self.history.light_clone(),
+        }
+    }
+
+    pub fn current_player(&self) -> Color {
+        self.current_player
+    }
+
+    pub fn history(&self) -> GameHistory {
+        self.history.clone()
+    }
+
+    pub fn board(&self) -> &Board {
+        &self.board
     }
 }
 
@@ -1198,11 +1351,11 @@ impl Piece {
         match self.type_() {
             PieceType::Pawn => {
                 let step: u8 = match self.color() {
-                    Color::White => 0x10,
-                    Color::Black => 0xf0,
+                    Color::White => 0xf0,
+                    Color::Black => 0x10,
                 };
                 distance(self.position, target) == 2
-                    && (self.position & 0xf0).wrapping_add(step) == target & 0xf0
+                    && self.position.wrapping_add(step) & 0xf0 == target & 0xf0
             }
             PieceType::Bishop => {
                 is_in_diagonal_line(self.position, target)

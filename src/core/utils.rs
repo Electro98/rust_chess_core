@@ -85,18 +85,22 @@ pub fn in_direction(position: u8, direction: u8) -> DirectionIterator {
     }
 }
 
-pub fn distance(from: u8, to: u8) -> u8 {
-    (from & 0x0f).abs_diff(to & 0x0f) + ((from & 0xf0) >> 4).abs_diff((to & 0xf0) >> 4)
+pub fn distance(a: u8, b: u8) -> u8 {
+    let file_diff = (a & 0xf0).abs_diff(b & 0xf0);
+    let rank_diff = (a & 0x0f).abs_diff(b & 0x0f);
+    (file_diff >> 4) + rank_diff
 }
 
 pub fn is_in_straight_line(a: u8, b: u8) -> bool {
-    let diff = a.abs_diff(b);
-    diff & 0x0f == 0 || diff & 0xf0 == 0
+    let file_diff = (a & 0xf0).abs_diff(b & 0xf0);
+    let rank_diff = (a & 0x0f).abs_diff(b & 0x0f);
+    file_diff == 0 || rank_diff == 0
 }
 
 pub fn is_in_diagonal_line(a: u8, b: u8) -> bool {
-    let diff = a.abs_diff(b);
-    diff & 0x0f == (diff & 0xf0) >> 4
+    let file_diff = (a & 0xf0).abs_diff(b & 0xf0);
+    let rank_diff = (a & 0x0f).abs_diff(b & 0x0f);
+    file_diff >> 4 == rank_diff
 }
 
 #[inline]

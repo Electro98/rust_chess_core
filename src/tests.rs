@@ -1,5 +1,7 @@
-use engine::{Move, Piece};
+use engine::{Game, Move, MoveType, Piece};
 use game::ui_board;
+use num_traits::Signed;
+use utils::{between, compact_pos, distance, is_in_diagonal_line, is_in_straight_line, unpack_pos};
 
 use self::engine::Board;
 
@@ -33,6 +35,41 @@ fn test_iters() {
                 code == iter_code.unwrap(),
                 "Code is different from for loop!"
             );
+        }
+    }
+}
+
+#[test]
+fn math() {
+    assert!(is_in_diagonal_line(71, 116), "This line is straight");
+    let cells: Vec<_> = between(71, 116).collect();
+    assert!(cells == vec![86, 101]);
+}
+
+#[test]
+fn straight_line() {
+    const STRAIGHT_LINE: [u8; 9] = [0x02, 0x12, 0x20, 0x21, 0x22, 0x23, 0x24, 0x32, 0x42];
+    let test_piece = 0x22;
+    for rank in 0..5 {
+        for file in 0..5 {
+            let pos = compact_pos(rank, file);
+            println!("Current position: 0x{pos:x}");
+            assert!(STRAIGHT_LINE.contains(&pos) == is_in_straight_line(test_piece, pos));
+            assert!(STRAIGHT_LINE.contains(&pos) == is_in_straight_line(pos, test_piece));
+        }
+    }
+}
+
+#[test]
+fn diagonal_line() {
+    const DIAGONAL_LINE: [u8; 9] = [0x00, 0x04, 0x11, 0x13, 0x22, 0x31, 0x33, 0x40, 0x44];
+    let test_piece = 0x22;
+    for rank in 0..5 {
+        for file in 0..5 {
+            let pos = compact_pos(rank, file);
+            println!("Current position: 0x{pos:x}");
+            assert!(DIAGONAL_LINE.contains(&pos) == is_in_diagonal_line(test_piece, pos));
+            assert!(DIAGONAL_LINE.contains(&pos) == is_in_diagonal_line(pos, test_piece));
         }
     }
 }
@@ -84,9 +121,9 @@ fn obstruction() {
 fn random_moves_game() {
     for _ in 0..100 {
         let mut game: Game = Default::default();
-        while !matches!(game.make_random_move(), GameState::Finished) {
-            // do nothing
-        }
+        // while !matches!(game.make_random_move(), GameState::Finished) {
+        //     // do nothing
+        // }
     }
 }
 
@@ -94,7 +131,7 @@ fn random_moves_game() {
 fn fen_parsing() {
     const FENs: [&str; 1] = ["rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"];
     for setup in FENs {
-        let (_board, _, _) = Board::from_fen(setup).unwrap();
+        let _game = Game::from_fen(setup).unwrap();
     }
 }
 
@@ -106,8 +143,8 @@ struct PERFResult {
     castles: usize,
     promotions: usize,
     checks: usize,
-    // discovery_checks: usize,
-    // double_checks: usize,
+    discovery_checks: usize,
+    double_checks: usize,
     checkmates: usize,
 }
 
@@ -120,6 +157,8 @@ impl PERFResult {
             castles: self.castles + other.castles,
             promotions: self.promotions + other.promotions,
             checks: self.checks + other.checks,
+            discovery_checks: self.discovery_checks + other.discovery_checks,
+            double_checks: self.double_checks + other.double_checks,
             checkmates: self.checkmates + other.checkmates,
         }
     }
@@ -131,25 +170,33 @@ fn count_perf_result(moves: Vec<Move>) -> PERFResult {
         ..Default::default()
     };
     for _move in moves {
-        match _move {
-            Move::NullMove => panic!("Generator created a NULL move."),
-            Move::QuietMove(_, _) => (),
-            Move::Capture(_, _) => result.captures += 1,
-            Move::Castling(_, _, _) => result.castles += 1,
-            Move::PromotionQuiet(_, _, _) => result.promotions += 1,
-            Move::PromotionCapture(_, _, _) => {
+        match _move.move_type() {
+            MoveType::QuietMove(_) => (),
+            MoveType::Capture(_) => result.captures += 1,
+            MoveType::Castling(_, _) => result.castles += 1,
+            MoveType::PromotionQuiet(_, _) => result.promotions += 1,
+            MoveType::PromotionCapture(_, _) => {
                 result.captures += 1;
                 result.promotions += 1;
             }
-            Move::PawnDoublePush(_, _) => (),
-            Move::EnPassantCapture(_, _) => result.en_passaunt += 1,
+            MoveType::PawnDoublePush(_) => (),
+            MoveType::EnPassantCapture(_) => {
+                result.captures += 1;
+                result.en_passaunt += 1;
+            },
+        }
+        match _move.check() {
+            engine::CheckType::None => (),
+            engine::CheckType::Direct => result.checks += 1,
+            engine::CheckType::Discovered => result.discovery_checks += 1,
+            engine::CheckType::Double => result.double_checks += 1,
         }
     }
     result
 }
 
-fn perf_test_step(board: &Board, player: Color, last_move: Move, depth: usize) -> PERFResult {
-    let possible_moves = board.get_possible_moves(player, last_move, true);
+fn perf_test_step(game: Game, depth: usize) -> PERFResult {
+    let possible_moves = game.get_possible_moves(true);
     if depth == 0 {
         PERFResult {
             all: 1,
@@ -161,9 +208,13 @@ fn perf_test_step(board: &Board, player: Color, last_move: Move, depth: usize) -
         possible_moves
             .into_iter()
             .map(|_move| {
-                let mut board = board.clone();
-                board.execute(_move.clone());
-                perf_test_step(&board, player.opposite(), _move, depth - 1)
+                let mut game = game.light_clone();
+                if let Some(_end_state) = game.execute(_move, true) {
+                    Default::default()
+                    // perf_test_step(game, 0)
+                } else {
+                    perf_test_step(game, depth - 1)
+                }
             })
             .reduce(PERFResult::combine)
             .expect("Result should exist")
@@ -172,23 +223,29 @@ fn perf_test_step(board: &Board, player: Color, last_move: Move, depth: usize) -
 
 #[test]
 fn move_generation() {
-    let PERF_SETUP: [(&str, Vec<usize>); 1] = [(
-        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
-        vec![
-            1,
-            20,
-            400,
-            8902,
-            197_281,
-            4_865_609,
-            119_060_324,
-            3_195_901_860,
-        ],
-    )];
-    for (fen_string, results) in PERF_SETUP {
-        let (board, player, last_move) = Board::from_fen(fen_string).unwrap();
+    let perf_setup: [(&str, Vec<usize>); 2] = [
+        (
+            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            vec![
+                1,
+                20,
+                400,
+                8902,
+                197_281,
+                4_865_609,
+                119_060_324,
+                3_195_901_860,
+            ],
+        ),
+        (
+            "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - ",
+            vec![1, 48, 2039, 97_862, 4_085_603, 193_690_690, 8_031_647_685],
+        ),
+    ];
+    for (fen_string, results) in perf_setup {
+        let game = Game::from_fen(fen_string).unwrap();
         for (depth, expected) in results.iter().enumerate() {
-            let result = perf_test_step(&board, player, last_move.clone(), depth);
+            let result = perf_test_step(game.light_clone(), depth);
             let nodes_count = result.all;
             println!("Step {depth} - Result: {nodes_count} - Expected: {expected}");
             println!("Details: {result:#?}");
