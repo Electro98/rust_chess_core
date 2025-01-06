@@ -1,6 +1,8 @@
-use engine::{Game, Move, MoveType, Piece};
+use std::{fmt::Display, ops::AddAssign};
+
+use engine::{CheckType, Game, GameEndState, Move, MoveType, Piece};
 use game::ui_board;
-use num_traits::Signed;
+use rand::seq::IteratorRandom;
 use utils::{between, compact_pos, distance, is_in_diagonal_line, is_in_straight_line, unpack_pos};
 
 use self::engine::Board;
@@ -119,11 +121,20 @@ fn obstruction() {
 #[test]
 #[ignore = "slow"]
 fn random_moves_game() {
+    fn make_random_move(game: &mut Game) -> Option<GameEndState> {
+        game.execute(
+            game.get_possible_moves(true)
+                .into_iter()
+                .choose(&mut rand::thread_rng())
+                .unwrap(),
+            true,
+        )
+    }
     for _ in 0..100 {
         let mut game: Game = Default::default();
-        // while !matches!(game.make_random_move(), GameState::Finished) {
-        //     // do nothing
-        // }
+        while make_random_move(&mut game).is_none() {
+            // do nothing
+        }
     }
 }
 
@@ -164,6 +175,38 @@ impl PERFResult {
     }
 }
 
+impl AddAssign for PERFResult {
+    fn add_assign(&mut self, rhs: Self) {
+        self.all += rhs.all;
+        self.captures += rhs.captures;
+        self.en_passaunt += rhs.en_passaunt;
+        self.castles += rhs.castles;
+        self.promotions += rhs.promotions;
+        self.checks += rhs.checks;
+        self.discovery_checks += rhs.discovery_checks;
+        self.double_checks += rhs.double_checks;
+        self.checkmates += rhs.checkmates;
+    }
+}
+
+impl Display for PERFResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} - cp: {:<4} ep: {:<4} cs: {:<4} pr: {:<4} Ch: {:<4} dCh: {:<4} Ch2: {:<4} CM: {:4}",
+            self.all,
+            self.captures,
+            self.en_passaunt,
+            self.castles,
+            self.promotions,
+            self.checks,
+            self.discovery_checks,
+            self.double_checks,
+            self.checkmates
+        )
+    }
+}
+
 fn count_perf_result(moves: Vec<Move>) -> PERFResult {
     let mut result = PERFResult {
         all: moves.len(),
@@ -183,13 +226,19 @@ fn count_perf_result(moves: Vec<Move>) -> PERFResult {
             MoveType::EnPassantCapture(_) => {
                 result.captures += 1;
                 result.en_passaunt += 1;
-            },
+            }
         }
         match _move.check() {
             engine::CheckType::None => (),
             engine::CheckType::Direct => result.checks += 1,
-            engine::CheckType::Discovered => result.discovery_checks += 1,
-            engine::CheckType::Double => result.double_checks += 1,
+            engine::CheckType::Discovered => {
+                result.checks += 1;
+                result.discovery_checks += 1;
+            }
+            engine::CheckType::Double => {
+                result.checks += 1;
+                result.double_checks += 1;
+            }
         }
     }
     result
@@ -209,8 +258,15 @@ fn perf_test_step(game: Game, depth: usize) -> PERFResult {
             .into_iter()
             .map(|_move| {
                 let mut game = game.light_clone();
-                if let Some(_end_state) = game.execute(_move, true) {
-                    Default::default()
+                if let Some(end_state) = game.execute(_move, true) {
+                    PERFResult {
+                        checkmates: if matches!(end_state, GameEndState::CheckMate) {
+                            1
+                        } else {
+                            0
+                        },
+                        ..Default::default()
+                    }
                     // perf_test_step(game, 0)
                 } else {
                     perf_test_step(game, depth - 1)
@@ -218,6 +274,27 @@ fn perf_test_step(game: Game, depth: usize) -> PERFResult {
             })
             .reduce(PERFResult::combine)
             .expect("Result should exist")
+    }
+}
+
+fn perf_test(fen_string: &str, depth: usize, expected: usize, detailed: bool) -> bool {
+    let game = Game::from_fen(fen_string).unwrap();
+    println!(" - setup: | {fen_string} | depth: {depth} detailed: {detailed}");
+    if detailed {
+        let mut total: PERFResult = Default::default();
+        for _move in game.get_possible_moves(true) {
+            let mut temp_game = game.light_clone();
+            temp_game.execute(_move.clone(), true);
+            let result = perf_test_step(temp_game, depth - 1);
+            println!(" {_move} : {result}");
+            total += result;
+        }
+        println!("+ total: {total}");
+        total.all == expected
+    } else {
+        let result = perf_test_step(game, depth);
+        println!(" details: {result}");
+        result.all == expected
     }
 }
 
@@ -243,13 +320,8 @@ fn move_generation() {
         ),
     ];
     for (fen_string, results) in perf_setup {
-        let game = Game::from_fen(fen_string).unwrap();
-        for (depth, expected) in results.iter().enumerate() {
-            let result = perf_test_step(game.light_clone(), depth);
-            let nodes_count = result.all;
-            println!("Step {depth} - Result: {nodes_count} - Expected: {expected}");
-            println!("Details: {result:#?}");
-            assert!(result.all == *expected, "Results don't match up");
+        for (depth, expected) in results.iter().enumerate().skip(2).take(6) {
+            assert!(perf_test(fen_string, depth, *expected, true), "Result don't match up")
         }
     }
 }

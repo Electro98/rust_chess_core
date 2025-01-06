@@ -1,3 +1,5 @@
+use std::fmt::format;
+
 #[derive(Debug)]
 pub struct BetweenIterator {
     current: u8,
@@ -109,12 +111,27 @@ pub fn is_valid_coord(coord: u8) -> bool {
 }
 
 #[inline]
-pub fn compact_pos(rank: u8, file: u8) -> u8 {
-    rank << 4 | file
+pub fn compact_pos(file: u8, rank: u8) -> u8 {
+    file << 4 | rank
 }
 
 #[inline]
 pub fn unpack_pos<T: From<u8>, V: Into<u8>>(pos: V) -> (T, T) {
     let pos: u8 = pos.into();
     (((pos & 0xf0) >> 4).into(), (pos & 0x0f).into())
+}
+
+const POS_TO_STRING: [&str; 128] = [
+    "a1", "b1", "c1", "d1", "e1", "f1", "g1", "h1", "XX", "XX", "XX", "XX", "XX", "XX", "XX", "XX",
+    "a2", "b2", "c2", "d2", "e2", "f2", "g2", "h2", "XX", "XX", "XX", "XX", "XX", "XX", "XX", "XX",
+    "a3", "b3", "c3", "d3", "e3", "f3", "g3", "h3", "XX", "XX", "XX", "XX", "XX", "XX", "XX", "XX",
+    "a4", "b4", "c4", "d4", "e4", "f4", "g4", "h4", "XX", "XX", "XX", "XX", "XX", "XX", "XX", "XX",
+    "a5", "b5", "c5", "d5", "e5", "f5", "g5", "h5", "XX", "XX", "XX", "XX", "XX", "XX", "XX", "XX",
+    "a6", "b6", "c6", "d6", "e6", "f6", "g6", "h6", "XX", "XX", "XX", "XX", "XX", "XX", "XX", "XX",
+    "a7", "b7", "c7", "d7", "e7", "f7", "g7", "h7", "XX", "XX", "XX", "XX", "XX", "XX", "XX", "XX",
+    "a8", "b8", "c8", "d8", "e8", "f8", "g8", "h8", "XX", "XX", "XX", "XX", "XX", "XX", "XX", "XX",
+];
+
+pub fn pos_to_str(pos: u8) -> &'static str {
+    POS_TO_STRING[pos as usize]
 }

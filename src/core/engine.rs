@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use std::fmt::Display;
+use std::fmt::{write, Display};
 use std::{fmt::Debug, iter::zip};
 
 use serde::{Deserialize, Serialize};
@@ -11,6 +11,8 @@ use crate::utils::{
     between, compact_pos, distance, in_direction, is_in_diagonal_line, is_in_straight_line,
     is_valid_coord, unpack_pos,
 };
+
+use super::utils::pos_to_str;
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum CastlingSide {
@@ -83,9 +85,15 @@ impl Move {
     pub fn move_type(&self) -> &MoveType {
         &self.move_type
     }
-    
+
     pub fn check(&self) -> CheckType {
         self.check
+    }
+}
+
+impl Display for Move {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}{}", pos_to_str(self.piece.position), pos_to_str(self.end_position()))
     }
 }
 
@@ -755,6 +763,30 @@ pub enum GameEndState {
     DrawInsufficientMaterial,
 }
 
+fn flag_piece_moved(piece: PieceType, color: Color, pos: u8) -> u8 {
+    let (file, rank): (u8, u8) = unpack_pos(pos);
+    let right_rank = match piece {
+        PieceType::Pawn => true,
+        PieceType::Rook => rank == 0x0 || rank == 0x7,
+        PieceType::Knight => rank == 0x1 || rank == 0x6,
+        PieceType::Bishop => rank == 0x2 || rank == 0x5,
+        PieceType::Queen => rank == 0x3,
+        PieceType::King => rank == 0x4,
+        PieceType::EmptySquare => true,
+        PieceType::Invalid => unreachable!("Created an invalid piece?"),
+    };
+    let is_pawn = matches!(piece, PieceType::Pawn);
+    let right_file = match color {
+        Color::Black => (is_pawn && file == 0x01) || (!is_pawn && file == 0x00),
+        Color::White => (is_pawn && file == 0x06) || (!is_pawn && file == 0x07),
+    };
+    if right_rank && right_file {
+        0
+    } else {
+        PieceFlag::Moved as u8
+    }
+}
+
 impl Game {
     pub fn from_fen(fen: &str) -> Result<Game, String> {
         let mut chars = fen.chars();
@@ -792,7 +824,8 @@ impl Game {
                     }
                 };
                 let pos = compact_pos(rank as u8, file as u8);
-                board.arr[pos as usize] = piece as u8 | color as u8;
+                board.arr[pos as usize] =
+                    piece as u8 | color as u8 | flag_piece_moved(piece, color, pos);
                 file += 1;
             }
         }
@@ -865,7 +898,7 @@ impl Game {
         // Check for pawn double push
         let last_move = self.history.last_move();
         let enpassant_pawn = match last_move.as_ref().map(|_move| _move.move_type) {
-            Some(MoveType::PawnDoublePush(_)) => Some(last_move.unwrap().piece),
+            Some(MoveType::PawnDoublePush(_)) => Some(last_move.unwrap().end_position()),
             _ => None,
         };
         let mut possible_moves = Vec::with_capacity(256);
@@ -972,13 +1005,14 @@ impl Game {
                         }
                     }
                     // enpassant
-                    if let Some(pawn) = &enpassant_pawn {
-                        if pawn.position.abs_diff(piece.position) == 0x01
-                            && pawn.color() != self.current_player
-                        {
+                    if let Some(pawn_pos) = &enpassant_pawn {
+                        if pawn_pos.abs_diff(piece.position) == 0x01 {
                             possible_moves.push(Move {
                                 piece,
-                                move_type: MoveType::EnPassantCapture(pawn.clone()),
+                                move_type: MoveType::EnPassantCapture(Piece::from_code(
+                                    self.board.arr[*pawn_pos as usize],
+                                    *pawn_pos,
+                                )),
                                 check: CheckType::None,
                             })
                         }
@@ -1018,7 +1052,9 @@ impl Game {
                         .iter()
                         .map(|off| off.wrapping_add(piece.position))
                         .filter(|pos| is_valid_coord(*pos))
-                        .filter(|pos| !kingless_board.is_attacked(*pos, self.current_player.opposite()))
+                        .filter(|pos| {
+                            !kingless_board.is_attacked(*pos, self.current_player.opposite())
+                        })
                     {
                         let cell = self.board.arr[pos as usize];
                         if cell == 0x00 {
@@ -1035,7 +1071,9 @@ impl Game {
                             })
                         }
                     }
-                    if PieceFlag::Moved.is_set(piece.code) {
+                    if PieceFlag::Moved.is_set(piece.code)
+                        || king_in_check.map_or(false, |check| !matches!(check, CheckType::None))
+                    {
                         continue;
                     }
                     for (castling_side, piece_flag) in zip(
@@ -1043,14 +1081,20 @@ impl Game {
                         [PieceFlag::CanCastleKingSide, PieceFlag::CanCastleQueenSide],
                     ) {
                         let rook_pos = piece.position & 0xf0 | castling_side as u8;
+                        // A little offset to check only squares affected by castling
+                        let check_pos = rook_pos | 0x01;
                         let cell = self.board.arr[rook_pos as usize];
                         if !PieceFlag::Moved.is_set(cell)
                             && Color::from_byte(cell) == self.current_player
                             && PieceType::from_byte(cell) == PieceType::Rook
                             && piece_flag.is_set(piece.code)
-                            && between(rook_pos, piece.position)
-                                .map(|pos| self.board.arr[pos as usize])
-                                .all(|code| code == 0x00)
+                            && between(check_pos, piece.position)
+                                .map(|pos| (self.board.arr[pos as usize], pos))
+                                .all(|(code, pos)| {
+                                    code == 0x00
+                                        && !self.board
+                                            .is_attacked(pos, self.current_player.opposite())
+                                })
                         {
                             possible_moves.push(Move {
                                 piece,
@@ -1198,7 +1242,7 @@ impl Game {
         }
         possible_moves
     }
-
+// 
     pub fn execute(&mut self, _move: Move, bot: bool) -> Option<GameEndState> {
         if !bot {
             // TODO: Recheck promotion moves about king checks
@@ -1209,15 +1253,15 @@ impl Game {
         self.history.record(_move.clone());
         // #[cfg(debug_assertions)]
         // if !matches!(_move.check, CheckType::None) {
-            // let king = self
-                // .board
-                // .iter_pieces()
-                // .find(|piece| piece.color() == self.current_player && piece.type_() == PieceType::King)
-                // .expect("King of current player should be present to make a move");
-            // let pinned_pieces = self.board.count_pinned_pieces(king);
-            // dbg!(pinned_pieces);
-            // let attackers = self.board.who_can_attack(king);
-            // dbg!(attackers);
+        // let king = self
+        // .board
+        // .iter_pieces()
+        // .find(|piece| piece.color() == self.current_player && piece.type_() == PieceType::King)
+        // .expect("King of current player should be present to make a move");
+        // let pinned_pieces = self.board.count_pinned_pieces(king);
+        // dbg!(pinned_pieces);
+        // let attackers = self.board.who_can_attack(king);
+        // dbg!(attackers);
         // }
         match _move.move_type() {
             MoveType::QuietMove(_) => {
