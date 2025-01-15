@@ -6,8 +6,8 @@ use std::{fmt::Debug, iter::zip};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, Bytes};
 
-use crate::definitions::ImplicitMove;
-use crate::utils::{
+use crate::core::definitions::ImplicitMove;
+use crate::core::utils::{
     between, compact_pos, distance, in_direction, is_in_diagonal_line, is_in_straight_line,
     is_valid_coord, pos_to_str, unpack_pos,
 };
@@ -744,16 +744,66 @@ impl GameHistory {
         }
     }
 
+    fn unrecord(&mut self) {
+        match self {
+            GameHistory::LastMove(last_move) => {
+                if last_move.is_some() {
+                    *last_move = None;
+                } else {
+                    panic!("Trying to undo unrecorded move!");
+                }
+            }
+            GameHistory::FullHistory(moves) => {
+                moves.pop();
+            }
+        }
+    }
+
     fn light_clone(&self) -> Self {
         GameHistory::LastMove(self.last_move())
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Clone, Default, Debug)]
+struct ExistedPositions {
+    boards: Vec<CompressedBoard>,
+    offsets: Vec<usize>,
+}
+
+impl ExistedPositions {
+    fn new() -> Self {
+        Default::default()
+    }
+
+    fn push(&mut self, board: CompressedBoard) {
+        self.boards.push(board);
+    }
+
+    fn count(&mut self, board: &CompressedBoard) -> usize {
+        self.boards
+            .iter()
+            .skip(*self.offsets.last().unwrap_or(&0))
+            .filter(|exboard| *exboard == board)
+            .count()
+    }
+
+    fn clear(&mut self) {
+        self.offsets.push(self.boards.len());
+    }
+
+    fn undo_move(&mut self, move_type: MoveType) {
+        self.boards.pop();
+        if !matches!(move_type, MoveType::QuietMove(_)) {
+            self.offsets.pop();
+        }
+    }
+}
+
+#[derive(Clone, Default, Debug)]
 pub struct Game {
     board: Board,
     current_player: Color,
-    existed_positions: Vec<CompressedBoard>,
+    existed_positions: ExistedPositions,
     history: GameHistory,
 }
 
@@ -936,7 +986,7 @@ impl Game {
         Ok(Self {
             board,
             current_player,
-            existed_positions: Vec::new(),
+            existed_positions: Default::default(),
             history: GameHistory::FullHistory(if let Some(last_move) = last_move {
                 vec![last_move]
             } else {
@@ -1305,34 +1355,16 @@ impl Game {
         self.current_player = self.current_player.opposite();
         self.board.execute(_move.clone());
         self.history.record(_move.clone());
-        // #[cfg(debug_assertions)]
-        // if !matches!(_move.check, CheckType::None) {
-        // let king = self
-        // .board
-        // .iter_pieces()
-        // .find(|piece| piece.color() == self.current_player && piece.type_() == PieceType::King)
-        // .expect("King of current player should be present to make a move");
-        // let pinned_pieces = self.board.count_pinned_pieces(king);
-        // dbg!(pinned_pieces);
-        // let attackers = self.board.who_can_attack(king);
-        // dbg!(attackers);
-        // }
+        let compressed_board = self.board.compress();
         match _move.move_type() {
             MoveType::QuietMove(_) => {
-                let compressed_board = self.board.compress();
-                if self
-                    .existed_positions
-                    .iter()
-                    .filter(|exboard| *exboard == &compressed_board)
-                    .count()
-                    >= 2
-                {
+                if self.existed_positions.count(&compressed_board) >= 2 {
                     return Some(GameEndState::DrawTreefoldRepetion);
                 }
-                self.existed_positions.push(compressed_board);
             }
             _ => self.existed_positions.clear(),
         }
+        self.existed_positions.push(compressed_board);
         if self.get_possible_moves(false).is_empty() {
             match _move.check {
                 CheckType::None => Some(GameEndState::DrawStalemate),
@@ -1341,6 +1373,18 @@ impl Game {
         } else {
             None
         }
+    }
+
+    pub fn undo_last_move(&mut self) -> Result<(), &'static str> {
+        let last_move = self
+            .history
+            .last_move()
+            .ok_or_else(|| "There's no move to undo.")?;
+        self.existed_positions.undo_move(*last_move.move_type());
+        self.board.undo(last_move);
+        self.history.unrecord();
+        self.current_player = self.current_player.opposite();
+        Ok(())
     }
 
     pub fn light_clone(&self) -> Self {

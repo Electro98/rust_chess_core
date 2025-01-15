@@ -1,11 +1,11 @@
-use std::{fmt::Display, ops::AddAssign};
 
-use engine::{CheckType, Game, GameEndState, Move, MoveType, Piece};
-use game::ui_board;
+use self::core::engine::{Board, CheckType, Game, GameEndState, Move, MoveType, Piece};
+use self::core::game::ui_board;
+use self::core::utils::{
+    between, compact_pos, distance, is_in_diagonal_line, is_in_straight_line, unpack_pos,
+};
+use self::utils::perf_test;
 use rand::seq::IteratorRandom;
-use utils::{between, compact_pos, distance, is_in_diagonal_line, is_in_straight_line, unpack_pos};
-
-use self::engine::Board;
 
 use super::*;
 
@@ -146,185 +146,34 @@ fn fen_parsing() {
     }
 }
 
-#[derive(Debug, Default)]
-struct PERFResult {
-    all: usize,
-    captures: usize,
-    en_passaunt: usize,
-    castles: usize,
-    promotions: usize,
-    checks: usize,
-    discovery_checks: usize,
-    double_checks: usize,
-    checkmates: usize,
-}
-
-impl PERFResult {
-    fn combine(self, other: PERFResult) -> Self {
-        PERFResult {
-            all: self.all + other.all,
-            captures: self.captures + other.captures,
-            en_passaunt: self.en_passaunt + other.en_passaunt,
-            castles: self.castles + other.castles,
-            promotions: self.promotions + other.promotions,
-            checks: self.checks + other.checks,
-            discovery_checks: self.discovery_checks + other.discovery_checks,
-            double_checks: self.double_checks + other.double_checks,
-            checkmates: self.checkmates + other.checkmates,
+macro_rules! perf_tests {
+    ($fen_string:literal $($name:ident: $value:expr)*) => {
+    $(
+        #[test]
+        fn $name() {
+            let fen_string = $fen_string;
+            let (expected, depth) = $value;
+            assert!(perf_test(fen_string, depth, expected, true, true), "Results don't match up");
         }
+    )*
     }
 }
 
-impl AddAssign for PERFResult {
-    fn add_assign(&mut self, rhs: Self) {
-        self.all += rhs.all;
-        self.captures += rhs.captures;
-        self.en_passaunt += rhs.en_passaunt;
-        self.castles += rhs.castles;
-        self.promotions += rhs.promotions;
-        self.checks += rhs.checks;
-        self.discovery_checks += rhs.discovery_checks;
-        self.double_checks += rhs.double_checks;
-        self.checkmates += rhs.checkmates;
-    }
+perf_tests! {
+    "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+    perft_base_1: (400, 2)
+    perft_base_2: (8902, 3)
+    perft_base_3: (197_281, 4)
+    perft_base_4: (4_865_609, 5)
+    perft_base_5: (119_060_324, 6)
+    // perft_base_6: (3_195_901_860, 7)
 }
 
-impl Display for PERFResult {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{} - cp: {:<4} ep: {:<4} cs: {:<4} pr: {:<4} Ch: {:<4} dCh: {:<4} Ch2: {:<4} CM: {:4}",
-            self.all,
-            self.captures,
-            self.en_passaunt,
-            self.castles,
-            self.promotions,
-            self.checks,
-            self.discovery_checks,
-            self.double_checks,
-            self.checkmates
-        )
-    }
-}
-
-fn count_perf_result(moves: Vec<Move>) -> PERFResult {
-    let mut result = PERFResult {
-        all: moves.len(),
-        ..Default::default()
-    };
-    for _move in moves {
-        match _move.move_type() {
-            MoveType::QuietMove(_) => (),
-            MoveType::Capture(_) => result.captures += 1,
-            MoveType::Castling(_, _) => result.castles += 1,
-            MoveType::PromotionQuiet(_, _) => result.promotions += 1,
-            MoveType::PromotionCapture(_, _) => {
-                result.captures += 1;
-                result.promotions += 1;
-            }
-            MoveType::PawnDoublePush(_) => (),
-            MoveType::EnPassantCapture(_) => {
-                result.captures += 1;
-                result.en_passaunt += 1;
-            }
-        }
-        match _move.check() {
-            engine::CheckType::None => (),
-            engine::CheckType::Direct => result.checks += 1,
-            engine::CheckType::Discovered => {
-                result.checks += 1;
-                result.discovery_checks += 1;
-            }
-            engine::CheckType::Double => {
-                result.checks += 1;
-                result.double_checks += 1;
-            }
-        }
-    }
-    result
-}
-
-fn perf_test_step(game: Game, depth: usize) -> PERFResult {
-    let possible_moves = game.get_possible_moves(true);
-    if depth == 0 {
-        PERFResult {
-            all: 1,
-            ..Default::default()
-        }
-    } else if depth == 1 {
-        count_perf_result(possible_moves)
-    } else {
-        possible_moves
-            .into_iter()
-            .map(|_move| {
-                let mut game = game.light_clone();
-                if let Some(end_state) = game.execute(_move, true) {
-                    PERFResult {
-                        checkmates: if matches!(end_state, GameEndState::CheckMate) {
-                            1
-                        } else {
-                            0
-                        },
-                        ..Default::default()
-                    }
-                    // perf_test_step(game, 0)
-                } else {
-                    perf_test_step(game, depth - 1)
-                }
-            })
-            .reduce(PERFResult::combine)
-            .expect("Result should exist")
-    }
-}
-
-fn perf_test(fen_string: &str, depth: usize, expected: usize, detailed: bool) -> bool {
-    let game = Game::from_fen(fen_string).unwrap();
-    println!(" - setup: | {fen_string} | depth: {depth} detailed: {detailed}");
-    if detailed {
-        let mut total: PERFResult = Default::default();
-        for _move in game.get_possible_moves(true) {
-            let mut temp_game = game.light_clone();
-            temp_game.execute(_move.clone(), true);
-            let result = perf_test_step(temp_game, depth - 1);
-            println!(" {_move} : {result}");
-            total += result;
-        }
-        println!("+ total: {total}");
-        total.all == expected
-    } else {
-        let result = perf_test_step(game, depth);
-        println!(" details: {result}");
-        result.all == expected
-    }
-}
-
-#[test]
-fn move_generation() {
-    let perf_setup: [(&str, Vec<usize>); 2] = [
-        (
-            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
-            vec![
-                1,
-                20,
-                400,
-                8902,
-                197_281,
-                4_865_609,
-                119_060_324,
-                3_195_901_860,
-            ],
-        ),
-        (
-            "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - ",
-            vec![1, 48, 2039, 97_862, 4_085_603, 193_690_690, 8_031_647_685],
-        ),
-    ];
-    for (fen_string, results) in perf_setup {
-        for (depth, expected) in results.iter().enumerate().skip(2).take(6) {
-            assert!(
-                perf_test(fen_string, depth, *expected, true),
-                "Result don't match up"
-            )
-        }
-    }
+perf_tests! {
+    "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - "
+    perft_kiwipete_1: (2039, 2)
+    perft_kiwipete_2: (97_862, 3)
+    perft_kiwipete_3: (4_085_603, 4)
+    perft_kiwipete_4: (193_690_690, 5)
+    // perft_kiwipete_5: (8_031_647_685, 6)
 }

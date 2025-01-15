@@ -65,6 +65,11 @@ impl eframe::App for App {
                         "Is checked: {:?}",
                         self.game.history().last_move().map(|_move| _move.check())
                     ));
+                    if ui.button("Undo last move").clicked() && self.game.undo_last_move().is_ok() {
+                        self.end_state = None;
+                        self.chosen_figure = None;
+                        self.moves = None;
+                    }
                     if let Some(end_state) = self.end_state {
                         ui.label("Game finished!");
                         ui.label(format!("Result: {:?}", end_state));

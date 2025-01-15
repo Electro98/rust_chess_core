@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::engine::{Color, Move as BaseMove, PieceType};
+use crate::core::engine::{Color, Move as BaseMove, PieceType};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Figure {

@@ -1,8 +1,8 @@
 use std::cmp::min;
 
-use crate::definitions::GameState;
-use crate::engine::{Board, Color, Move, Piece, PieceFlag, PieceType};
-use crate::utils::{compact_pos, unpack_pos};
+use crate::core::definitions::GameState;
+use crate::core::engine::{Board, Color, Move, Piece, PieceFlag, PieceType};
+use crate::core::utils::{compact_pos, unpack_pos};
 use crate::{Cell, DefaultExternalMove, Figure, MatchInterface};
 
 use rand::seq::IteratorRandom;

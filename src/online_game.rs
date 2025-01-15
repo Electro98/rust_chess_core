@@ -4,7 +4,7 @@ use log::{debug, info, warn};
 use url::Url;
 
 use crate::{
-    engine::Board,
+    core::engine::Board,
     server::definitions::{ClientMessage, ServerMessage},
     Color, DarkGame,
 };
