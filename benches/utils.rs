@@ -1,7 +1,8 @@
 use chess_engine::{
-    engine::{Board, Piece},
-    utils::compact_pos,
-    Game, GameState, PieceType,
+    core::engine::{Board, Game, Piece},
+    core::utils::compact_pos,
+    utils::perf_test,
+    GameState, PieceType,
 };
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
@@ -73,15 +74,15 @@ fn for_piece_count(board: &Board) -> u64 {
 }
 
 fn stupid_game(mut game: Game, max_steps: usize) -> Game {
-    for _ in 0..max_steps {
-        if matches!(game.make_random_move(), GameState::Finished) {
-            break;
-        }
-    }
+    // for _ in 0..max_steps {
+    //     if matches!(game.make_random_move(), GameState::Finished) {
+    //         break;
+    //     }
+    // }
     game
 }
 
-fn criterion_benchmark(c: &mut Criterion) {
+fn utils_benchmark(c: &mut Criterion) {
     c.bench_function("iter raw count", |b| {
         b.iter(|| iter_raw_count(black_box(&Board::default())))
     });
@@ -106,13 +107,38 @@ fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("obstruction hide", |b| {
         b.iter(|| black_box(Board::default()).hide_and_obstruct(chess_engine::Color::White))
     });
-    c.bench_function("stupid game 100", |b| {
-        b.iter(|| {
-            let game: Game = Default::default();
-            stupid_game(game, 100)
-        })
-    });
+    // c.bench_function("stupid game 100", |b| {
+    //     b.iter(|| {
+    //         let game: Game = Default::default();
+    //         stupid_game(game, 100)
+    //     })
+    // });
 }
 
-criterion_group!(benches, criterion_benchmark);
+fn perft_benchmark(c: &mut Criterion) {
+    let values: [(&str, &str, usize, usize); 2] = [
+        (
+            "perft base",
+            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            4_865_609,
+            5,
+        ),
+        (
+            "perft kiwipete",
+            "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - ",
+            4_085_603,
+            4,
+        ),
+    ];
+    for (id, setup, exp, depth) in values.into_iter() {
+        c.bench_function(&format!("{} - undo", id), |b| {
+            b.iter(|| perf_test(setup, depth, exp, false, true))
+        });
+        c.bench_function(&format!("{} - copy", id), |b| {
+            b.iter(|| perf_test(setup, depth, exp, false, false))
+        });
+    }
+}
+
+criterion_group!(benches, utils_benchmark, perft_benchmark);
 criterion_main!(benches);

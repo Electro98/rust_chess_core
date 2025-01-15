@@ -1,4 +1,8 @@
-use chess_engine::{Cell, Color, DefaultMove, Figure, Game, MatchInterface};
+use chess_engine::{
+    core::engine::{CheckType, Game, GameEndState, Move, Piece},
+    core::utils::unpack_pos,
+    Color, PieceType,
+};
 use eframe::{egui, epaint::Vec2};
 use gui::{background_color, piece_image};
 
@@ -7,9 +11,10 @@ mod gui;
 struct App {
     game: Game,
     cell_size: f32,
-    chosen_figure: Option<Figure>,
+    end_state: Option<GameEndState>,
+    chosen_figure: Option<Piece>,
     selected_cell: Option<(usize, usize)>,
-    moves: Option<Vec<DefaultMove>>,
+    moves: Option<Vec<Move>>,
 }
 
 fn main() -> Result<(), eframe::Error> {
@@ -25,9 +30,15 @@ fn main() -> Result<(), eframe::Error> {
             // This gives us image support:
             egui_extras::install_image_loaders(&cc.egui_ctx);
 
+            let game = Game::from_fen(
+                "r3k2r/p2p1pb1/bn1qpnp1/2pPN3/1p2P3/2N1BQ1p/PPP1BPPP/R2K3R w kq c6 0 1",
+            )
+            .unwrap();
+            dbg!(&game);
             Box::new(App {
-                game: Game::default(),
                 cell_size: 45.0,
+                game,
+                end_state: None,
                 chosen_figure: None,
                 selected_cell: None,
                 moves: None,
@@ -50,19 +61,34 @@ impl eframe::App for App {
                             "Black"
                         }
                     }));
-                    ui.label(format!("Is checked: {}", self.game.checked()));
-                    if self.game.game_ended() {
+                    ui.label(format!(
+                        "Is checked: {:?}",
+                        self.game.history().last_move().map(|_move| _move.check())
+                    ));
+                    if ui.button("Undo last move").clicked() && self.game.undo_last_move().is_ok() {
+                        self.end_state = None;
+                        self.chosen_figure = None;
+                        self.moves = None;
+                    }
+                    if let Some(end_state) = self.end_state {
                         ui.label("Game finished!");
+                        ui.label(format!("Result: {:?}", end_state));
                         if ui.button("Restart?").clicked() {
                             self.game = Game::default();
+                            self.end_state = None;
                             self.chosen_figure = None;
                             self.moves = None;
                         };
                     }
                 });
                 if let Some(_move) = move_to_exec {
-                    self.game.execute_move(_move);
-                    self.game.wait_move();
+                    // TODO: bot: false
+                    println!(" - move: {_move}");
+                    self.end_state = self.game.execute(_move, true);
+                    // if self.game.history().last_move().unwrap().check() != CheckType::None {
+                    //     dbg!(self.game.board())
+                    // }
+                    // self.game.wait_move();
                 }
             });
         });
@@ -70,8 +96,8 @@ impl eframe::App for App {
 }
 
 impl App {
-    fn grid(&mut self, ui: &mut egui::Ui) -> Option<DefaultMove> {
-        let board = self.game.current_board();
+    fn grid(&mut self, ui: &mut egui::Ui) -> Option<Move> {
+        let board = self.game.board();
         let mut move_to_exec = None;
         egui::Grid::new("main_grid")
             .striped(true)
@@ -79,40 +105,42 @@ impl App {
             .max_col_width(self.cell_size)
             .min_row_height(self.cell_size)
             .show(ui, |ui| {
-                for (rank, row) in board.iter().enumerate() {
-                    for (file, cell) in row.iter().enumerate() {
-                        let btn = if let Some(source) = piece_image(cell) {
+                for rank in (0..8).rev() {
+                    for file in 0..8 {
+                        let piece = board.get(rank, file);
+                        let btn = if let Some(source) = piece_image(&piece) {
                             egui::Button::image(source)
                         } else {
                             egui::Button::new("")
                         };
                         let selected = self
                             .selected_cell
-                            .map(|fig| fig == (rank, file))
+                            .map(|fig| fig == (rank as usize, file as usize))
                             .unwrap_or(false);
                         let btn = ui.add(
                             btn.frame(false)
                                 .min_size(Vec2::new(self.cell_size, self.cell_size))
                                 .fill(background_color(
-                                    (rank, file),
+                                    (rank as usize, file as usize),
                                     selected,
                                     self.moves
                                         .as_ref()
                                         .and_then(|moves| {
                                             moves.iter().find(|_move| {
-                                                _move.to == (rank as u32, file as u32)
+                                                unpack_pos(_move.end_position())
+                                                    == (rank as u32, file as u32)
                                             })
                                         })
                                         .is_some(),
-                                    !matches!(cell, Cell::Unknown),
+                                    true,
                                 )),
                         );
                         if btn.clicked() {
                             println!("Position {}-{} was clicked", rank, file);
-                            println!("Cell: {:?}", cell);
+                            println!("Cell: {:?}", piece);
                             self.moves = if let Some(moves) = self.moves.as_mut() {
-                                match cell {
-                                    Cell::Unknown => {
+                                match piece.type_() {
+                                    PieceType::Invalid => {
                                         self.chosen_figure = None;
                                         self.selected_cell = None;
                                         None
@@ -120,7 +148,10 @@ impl App {
                                     _ => {
                                         move_to_exec = moves
                                             .iter()
-                                            .find(|_move| _move.to == (rank as u32, file as u32))
+                                            .find(|_move| {
+                                                unpack_pos(_move.end_position())
+                                                    == (rank as u32, file as u32)
+                                            })
                                             .cloned();
                                         self.chosen_figure = None;
                                         self.selected_cell = None;
@@ -128,18 +159,29 @@ impl App {
                                     }
                                 }
                             } else {
-                                match cell {
-                                    Cell::Figure(figure) => {
-                                        let moves = self.game.possible_moves(rank, file);
-                                        self.chosen_figure = if moves.is_some() {
-                                            self.selected_cell = Some((rank, file));
-                                            Some(figure.clone())
+                                match piece.type_() {
+                                    PieceType::Invalid | PieceType::EmptySquare => None,
+                                    _ => {
+                                        let moves: Vec<_> = self
+                                            .game
+                                            .get_possible_moves(false)
+                                            .into_iter()
+                                            .filter(|_move| _move.piece() == &piece)
+                                            .collect();
+                                        // dbg!(&moves);
+                                        self.chosen_figure = if !moves.is_empty() {
+                                            self.selected_cell =
+                                                Some((rank as usize, file as usize));
+                                            Some(piece)
                                         } else {
                                             None
                                         };
-                                        moves
+                                        if moves.is_empty() {
+                                            None
+                                        } else {
+                                            Some(moves)
+                                        }
                                     }
-                                    _ => None,
                                 }
                             };
                         }

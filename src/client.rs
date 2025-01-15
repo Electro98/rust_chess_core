@@ -9,7 +9,7 @@ use std::{
 
 use chess_engine::server::definitions::ServerMessage;
 use chess_engine::{
-    engine::Board, Cell as FieldCell, Color, DarkGame, DefaultMove, Game, MatchInterface,
+    engine::Board, Cell as FieldCell, Color, DarkGame, DefaultExternalMove, Game, MatchInterface,
 };
 use chess_engine::{
     online_game::{Canceled, Connecting, MoveState, OnlineMatchState, Unconnected},
@@ -93,7 +93,7 @@ impl OnlineClient {
             old_value
         };
     }
-    fn send_move(&self, _move: DefaultMove) -> Result<bool, SendError<ClientMessage>> {
+    fn send_move(&self, _move: DefaultExternalMove) -> Result<bool, SendError<ClientMessage>> {
         let state = &*self.online_match.lock().unwrap();
         match state {
             OnlineMatchState::GameInProgress(game) if matches!(game.state, MoveState::MyMove) => {
@@ -338,7 +338,7 @@ impl App {
         frame: &mut eframe::Frame,
         game: DarkGame,
         current_player: bool,
-    ) -> Option<DefaultMove> {
+    ) -> Option<DefaultExternalMove> {
         let mut new_click = None;
         let player = if current_player {
             game.current_player()

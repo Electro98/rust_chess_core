@@ -4,14 +4,13 @@ use log::{debug, info, warn};
 use url::Url;
 
 use crate::{
-    engine::Board,
+    core::engine::Board,
     server::definitions::{ClientMessage, ServerMessage},
     Color, DarkGame,
 };
 
 pub type BackgroundThread = std::thread::JoinHandle<()>;
 
-#[rifgen::rifgen_attr::generate_interface]
 #[derive(Debug, Clone, Copy)]
 pub enum MoveState {
     MyMove,

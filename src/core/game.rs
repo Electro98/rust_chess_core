@@ -1,33 +1,24 @@
 use std::cmp::min;
 
-use crate::definitions::GameState;
-use crate::engine::{Board, Color, Move as ImplMove, Piece, PieceFlag, PieceType};
-use crate::utils::{compact_pos, unpack_pos};
-use crate::{Cell, DefaultMove, Figure, MatchInterface};
+use crate::core::definitions::GameState;
+use crate::core::engine::{Board, Color, Move, Piece, PieceFlag, PieceType};
+use crate::core::utils::{compact_pos, unpack_pos};
+use crate::{Cell, DefaultExternalMove, Figure, MatchInterface};
 
 use rand::seq::IteratorRandom;
 
-#[derive(Debug)]
-pub struct InvalidMoveError {}
-
-impl TryInto<DefaultMove> for ImplMove {
-    type Error = InvalidMoveError;
-
-    fn try_into(self) -> Result<DefaultMove, Self::Error> {
-        if matches!(self, ImplMove::NullMove) {
-            Err(InvalidMoveError {})
-        } else {
-            Ok(DefaultMove {
-                from: unpack_pos(self.piece().unwrap().position() as u8),
-                to: unpack_pos(self.end_position().unwrap()),
-                _move: self,
-            })
+impl Into<DefaultExternalMove> for Move {
+    fn into(self) -> DefaultExternalMove {
+        DefaultExternalMove {
+            from: unpack_pos(self.piece().position() as u8),
+            to: unpack_pos(self.end_position()),
+            _move: self,
         }
     }
 }
 
 #[inline]
-fn is_move_valid(_move: &ImplMove, board: &Board, current_player: Color, default: bool) -> bool {
+fn is_move_valid(_move: &Move, board: &Board, current_player: Color, default: bool) -> bool {
     let mut board: Board = board.clone();
     board.execute(_move.clone());
     match board.is_checked(current_player) {
@@ -67,7 +58,7 @@ pub fn ui_board(board: &Board) -> Vec<Vec<Cell>> {
 pub struct DarkGame {
     board: Board,
     player: Color,
-    last_move: ImplMove,
+    last_move: Option<Move>,
     finished: bool,
 }
 
@@ -77,13 +68,13 @@ impl DarkGame {
         DarkGame {
             board,
             player,
-            last_move: ImplMove::NullMove,
+            last_move: None,
             finished: false,
         }
     }
 }
 
-impl MatchInterface<ImplMove> for DarkGame {
+impl MatchInterface<Move> for DarkGame {
     fn current_board(&self) -> Vec<Vec<Cell>> {
         ui_board(&self.board)
     }
@@ -108,7 +99,7 @@ impl MatchInterface<ImplMove> for DarkGame {
         }
     }
 
-    fn possible_moves(&self, rank: usize, file: usize) -> Option<Vec<DefaultMove>> {
+    fn possible_moves(&self, rank: usize, file: usize) -> Option<Vec<DefaultExternalMove>> {
         let piece = self.board.get(rank as u8, file as u8);
         if self.finished
             || matches!(piece.type_(), PieceType::EmptySquare)
@@ -116,28 +107,29 @@ impl MatchInterface<ImplMove> for DarkGame {
         {
             None
         } else {
-            let moves: Vec<_> = self
-                .board
-                .get_possible_moves(self.player, self.last_move.clone(), false)
-                .into_iter()
-                .filter(|_move| {
-                    _move
-                        .piece()
-                        .map(|move_piece| move_piece == &piece)
-                        .unwrap_or(false)
-                })
-                .filter(|_move| is_move_valid(_move, &self.board, self.player, true))
-                .map(|_move| _move.try_into().unwrap())
-                .collect();
-            if moves.is_empty() {
-                None
-            } else {
-                Some(moves)
-            }
+            // let moves: Vec<_> = self
+            //     .board
+            //     .get_possible_moves(self.player, self.last_move.clone(), false)
+            //     .into_iter()
+            //     .filter(|_move| {
+            //         _move
+            //             .piece()
+            //             .map(|move_piece| move_piece == &piece)
+            //             .unwrap_or(false)
+            //     })
+            //     .filter(|_move| is_move_valid(_move, &self.board, self.player, true))
+            //     .map(|_move| _move.try_into().unwrap())
+            //     .collect();
+            // if moves.is_empty() {
+            //     None
+            // } else {
+            //     Some(moves)
+            // }
+            todo!()
         }
     }
 
-    fn execute_move(&mut self, _move: DefaultMove) -> GameState {
+    fn execute_move(&mut self, _move: DefaultExternalMove) -> GameState {
         todo!()
     }
 
@@ -165,7 +157,7 @@ impl MatchInterface<ImplMove> for DarkGame {
 pub struct Game {
     board: Board,
     current_player: Color,
-    history: Vec<DefaultMove>,
+    history: Vec<DefaultExternalMove>,
     checked: bool,
     finished: bool,
 }
@@ -194,7 +186,7 @@ impl Game {
         }
     }
 
-    fn make_move(&mut self, impl_move: ImplMove) -> GameState {
+    fn make_move(&mut self, impl_move: Move) -> GameState {
         self.board.execute(impl_move.clone());
         // let prev_player = self.current_player;
         self.current_player = if self.current_player == Color::White {
@@ -208,22 +200,22 @@ impl Game {
         }
         let (checked, king) = check_possibility.unwrap();
         self.checked = checked;
-        let moves: Vec<_> = self
-            .board
-            .get_possible_moves(
-                self.current_player,
-                self.last_move().unwrap_or(ImplMove::NullMove),
-                true,
-            )
-            .into_iter()
-            .filter(|impl_move| is_move_valid(impl_move, &self.board, self.current_player, false))
-            .collect();
-        self.finished = moves.is_empty();
-        self.board.castling_rights(king);
+        // let moves: Vec<_> = self
+        //     .board
+        //     .get_possible_moves(
+        //         self.current_player,
+        //         self.last_move().unwrap_or(Move::NullMove),
+        //         true,
+        //     )
+        //     .into_iter()
+        //     .filter(|impl_move| is_move_valid(impl_move, &self.board, self.current_player, false))
+        //     .collect();
+        // self.finished = moves.is_empty();
+        // self.board.castling_rights(king);
         GameState::PlayerMove(self.current_player)
     }
 
-    pub fn last_move(&self) -> Option<ImplMove> {
+    pub fn last_move(&self) -> Option<Move> {
         self.history.last().map(|_move| _move._move.clone())
     }
 
@@ -231,23 +223,24 @@ impl Game {
         if self.finished {
             return GameState::Finished;
         }
-        let chosen_move = self
-            .board
-            .get_possible_moves(
-                self.current_player,
-                self.last_move().unwrap_or(ImplMove::NullMove),
-                true,
-            )
-            .into_iter()
-            .filter(|impl_move| is_move_valid(impl_move, &self.board, self.current_player, false))
-            .choose(&mut rand::thread_rng());
+        // let chosen_move = self
+        //     .board
+        //     .get_possible_moves(
+        //         self.current_player,
+        //         self.last_move().unwrap_or(Move::NullMove),
+        //         true,
+        //     )
+        //     .into_iter()
+        //     .filter(|impl_move| is_move_valid(impl_move, &self.board, self.current_player, false))
+        //     .choose(&mut rand::thread_rng());
 
-        if let Some(_move) = chosen_move {
-            self.execute_move(_move.try_into().unwrap())
-        } else {
-            self.finished = true;
-            GameState::Finished
-        }
+        // if let Some(_move) = chosen_move {
+        //     self.execute_move(_move.try_into().unwrap())
+        // } else {
+        //     self.finished = true;
+        //     GameState::Finished
+        // }
+        todo!()
     }
 
     pub fn vision_board(&self, _player: Color) -> Board {
@@ -261,7 +254,7 @@ impl Default for Game {
     }
 }
 
-impl MatchInterface<ImplMove> for Game {
+impl MatchInterface<Move> for Game {
     fn current_board(&self) -> Vec<Vec<Cell>> {
         ui_board(&self.board)
     }
@@ -286,7 +279,7 @@ impl MatchInterface<ImplMove> for Game {
         }
     }
 
-    fn possible_moves(&self, rank: usize, file: usize) -> Option<Vec<DefaultMove>> {
+    fn possible_moves(&self, rank: usize, file: usize) -> Option<Vec<DefaultExternalMove>> {
         let piece = self.board.get(rank as u8, file as u8);
         if self.finished
             || matches!(piece.type_(), PieceType::EmptySquare)
@@ -294,32 +287,33 @@ impl MatchInterface<ImplMove> for Game {
         {
             None
         } else {
-            let moves: Vec<_> = self
-                .board
-                .get_possible_moves(
-                    self.current_player,
-                    self.last_move().unwrap_or(ImplMove::NullMove),
-                    false,
-                )
-                .into_iter()
-                .filter(|_move| {
-                    _move
-                        .piece()
-                        .map(|move_piece| move_piece == &piece)
-                        .unwrap_or(false)
-                })
-                .filter(|_move| is_move_valid(_move, &self.board, self.current_player, false))
-                .map(|_move| _move.try_into().unwrap())
-                .collect();
-            if moves.is_empty() {
-                None
-            } else {
-                Some(moves)
-            }
+            // let moves: Vec<_> = self
+            //     .board
+            //     .get_possible_moves(
+            //         self.current_player,
+            //         self.last_move().unwrap_or(Move::NullMove),
+            //         false,
+            //     )
+            //     .into_iter()
+            //     .filter(|_move| {
+            //         _move
+            //             .piece()
+            //             .map(|move_piece| move_piece == &piece)
+            //             .unwrap_or(false)
+            //     })
+            //     .filter(|_move| is_move_valid(_move, &self.board, self.current_player, false))
+            //     .map(|_move| _move.try_into().unwrap())
+            //     .collect();
+            // if moves.is_empty() {
+            //     None
+            // } else {
+            //     Some(moves)
+            // }
+            todo!()
         }
     }
 
-    fn execute_move(&mut self, _move: DefaultMove) -> GameState {
+    fn execute_move(&mut self, _move: DefaultExternalMove) -> GameState {
         self.history.push(_move.clone());
         self.make_move(_move._move)
     }

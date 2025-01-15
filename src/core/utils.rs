@@ -33,7 +33,7 @@ pub fn between(from: u8, to: u8) -> BetweenIterator {
     //     table
     // };
     let step = if is_in_diagonal_line(from, to) {
-        let (file, rank) = (diff & 0x08 == 0, diff & 0x80 == 0);
+        let (rank, file) = (diff & 0x80 == 0, diff & 0x08 == 0);
         match (file, rank) {
             (true, true) => 0x11,
             (true, false) => 0xf1,
@@ -85,18 +85,22 @@ pub fn in_direction(position: u8, direction: u8) -> DirectionIterator {
     }
 }
 
-pub fn distance(from: u8, to: u8) -> u8 {
-    (from & 0x0f).abs_diff(to & 0x0f) + ((from & 0xf0) >> 4).abs_diff((to & 0xf0) >> 4)
+pub fn distance(a: u8, b: u8) -> u8 {
+    let rank_diff = (a & 0xf0).abs_diff(b & 0xf0);
+    let file_diff = (a & 0x0f).abs_diff(b & 0x0f);
+    (rank_diff >> 4) + file_diff
 }
 
 pub fn is_in_straight_line(a: u8, b: u8) -> bool {
-    let diff = a.abs_diff(b);
-    diff & 0x0f == 0 || diff & 0xf0 == 0
+    let rank_diff = (a & 0xf0).abs_diff(b & 0xf0);
+    let file_diff = (a & 0x0f).abs_diff(b & 0x0f);
+    rank_diff == 0 || file_diff == 0
 }
 
 pub fn is_in_diagonal_line(a: u8, b: u8) -> bool {
-    let diff = a.abs_diff(b);
-    diff & 0x0f == (diff & 0xf0) >> 4
+    let rank_diff = (a & 0xf0).abs_diff(b & 0xf0);
+    let file_diff = (a & 0x0f).abs_diff(b & 0x0f);
+    rank_diff >> 4 == file_diff
 }
 
 #[inline]
@@ -113,4 +117,19 @@ pub fn compact_pos(rank: u8, file: u8) -> u8 {
 pub fn unpack_pos<T: From<u8>, V: Into<u8>>(pos: V) -> (T, T) {
     let pos: u8 = pos.into();
     (((pos & 0xf0) >> 4).into(), (pos & 0x0f).into())
+}
+
+const POS_TO_STRING: [&str; 128] = [
+    "a1", "b1", "c1", "d1", "e1", "f1", "g1", "h1", "XX", "XX", "XX", "XX", "XX", "XX", "XX", "XX",
+    "a2", "b2", "c2", "d2", "e2", "f2", "g2", "h2", "XX", "XX", "XX", "XX", "XX", "XX", "XX", "XX",
+    "a3", "b3", "c3", "d3", "e3", "f3", "g3", "h3", "XX", "XX", "XX", "XX", "XX", "XX", "XX", "XX",
+    "a4", "b4", "c4", "d4", "e4", "f4", "g4", "h4", "XX", "XX", "XX", "XX", "XX", "XX", "XX", "XX",
+    "a5", "b5", "c5", "d5", "e5", "f5", "g5", "h5", "XX", "XX", "XX", "XX", "XX", "XX", "XX", "XX",
+    "a6", "b6", "c6", "d6", "e6", "f6", "g6", "h6", "XX", "XX", "XX", "XX", "XX", "XX", "XX", "XX",
+    "a7", "b7", "c7", "d7", "e7", "f7", "g7", "h7", "XX", "XX", "XX", "XX", "XX", "XX", "XX", "XX",
+    "a8", "b8", "c8", "d8", "e8", "f8", "g8", "h8", "XX", "XX", "XX", "XX", "XX", "XX", "XX", "XX",
+];
+
+pub fn pos_to_str(pos: u8) -> &'static str {
+    POS_TO_STRING[pos as usize]
 }
