@@ -21,3 +21,5 @@ That's just chess engine for my "Dark Chess" game as my student diploma project.
  - [ ] Create kotling bindings
    - [ ] Compile it
    - [ ] Make it works
+
+# TODO: Proper thanks to jniemann66 developer of juddperft

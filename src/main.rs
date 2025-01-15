@@ -30,9 +30,14 @@ fn main() -> Result<(), eframe::Error> {
             // This gives us image support:
             egui_extras::install_image_loaders(&cc.egui_ctx);
 
+            let game = Game::from_fen(
+                "r3k2r/p2p1pb1/bn1qpnp1/2pPN3/1p2P3/2N1BQ1p/PPP1BPPP/R2K3R w kq c6 0 1",
+            )
+            .unwrap();
+            dbg!(&game);
             Box::new(App {
-                game: Game::from_fen("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - ").unwrap(),
                 cell_size: 45.0,
+                game,
                 end_state: None,
                 chosen_figure: None,
                 selected_cell: None,

@@ -321,7 +321,10 @@ fn move_generation() {
     ];
     for (fen_string, results) in perf_setup {
         for (depth, expected) in results.iter().enumerate().skip(2).take(6) {
-            assert!(perf_test(fen_string, depth, *expected, true), "Result don't match up")
+            assert!(
+                perf_test(fen_string, depth, *expected, true),
+                "Result don't match up"
+            )
         }
     }
 }
