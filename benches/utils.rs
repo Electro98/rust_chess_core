@@ -1,5 +1,8 @@
 use chess_engine::{
-    core::engine::{Board, Game, Piece}, utils::perf_test, core::utils::compact_pos, GameState, PieceType
+    core::engine::{Board, Game, Piece},
+    core::utils::compact_pos,
+    utils::perf_test,
+    GameState, PieceType,
 };
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
@@ -114,8 +117,18 @@ fn utils_benchmark(c: &mut Criterion) {
 
 fn perft_benchmark(c: &mut Criterion) {
     let values: [(&str, &str, usize, usize); 2] = [
-        ("perft base", "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", 4_865_609, 5),
-        ("perft kiwipete", "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - ", 4_085_603, 4),
+        (
+            "perft base",
+            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            4_865_609,
+            5,
+        ),
+        (
+            "perft kiwipete",
+            "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - ",
+            4_085_603,
+            4,
+        ),
     ];
     for (id, setup, exp, depth) in values.into_iter() {
         c.bench_function(&format!("{} - undo", id), |b| {

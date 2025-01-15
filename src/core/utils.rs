@@ -1,5 +1,3 @@
-use std::fmt::format;
-
 #[derive(Debug)]
 pub struct BetweenIterator {
     current: u8,
@@ -35,7 +33,7 @@ pub fn between(from: u8, to: u8) -> BetweenIterator {
     //     table
     // };
     let step = if is_in_diagonal_line(from, to) {
-        let (file, rank) = (diff & 0x08 == 0, diff & 0x80 == 0);
+        let (rank, file) = (diff & 0x80 == 0, diff & 0x08 == 0);
         match (file, rank) {
             (true, true) => 0x11,
             (true, false) => 0xf1,
@@ -88,21 +86,21 @@ pub fn in_direction(position: u8, direction: u8) -> DirectionIterator {
 }
 
 pub fn distance(a: u8, b: u8) -> u8 {
-    let file_diff = (a & 0xf0).abs_diff(b & 0xf0);
-    let rank_diff = (a & 0x0f).abs_diff(b & 0x0f);
-    (file_diff >> 4) + rank_diff
+    let rank_diff = (a & 0xf0).abs_diff(b & 0xf0);
+    let file_diff = (a & 0x0f).abs_diff(b & 0x0f);
+    (rank_diff >> 4) + file_diff
 }
 
 pub fn is_in_straight_line(a: u8, b: u8) -> bool {
-    let file_diff = (a & 0xf0).abs_diff(b & 0xf0);
-    let rank_diff = (a & 0x0f).abs_diff(b & 0x0f);
-    file_diff == 0 || rank_diff == 0
+    let rank_diff = (a & 0xf0).abs_diff(b & 0xf0);
+    let file_diff = (a & 0x0f).abs_diff(b & 0x0f);
+    rank_diff == 0 || file_diff == 0
 }
 
 pub fn is_in_diagonal_line(a: u8, b: u8) -> bool {
-    let file_diff = (a & 0xf0).abs_diff(b & 0xf0);
-    let rank_diff = (a & 0x0f).abs_diff(b & 0x0f);
-    file_diff >> 4 == rank_diff
+    let rank_diff = (a & 0xf0).abs_diff(b & 0xf0);
+    let file_diff = (a & 0x0f).abs_diff(b & 0x0f);
+    rank_diff >> 4 == file_diff
 }
 
 #[inline]
@@ -111,8 +109,8 @@ pub fn is_valid_coord(coord: u8) -> bool {
 }
 
 #[inline]
-pub fn compact_pos(file: u8, rank: u8) -> u8 {
-    file << 4 | rank
+pub fn compact_pos(rank: u8, file: u8) -> u8 {
+    rank << 4 | file
 }
 
 #[inline]

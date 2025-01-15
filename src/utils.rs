@@ -2,7 +2,6 @@ use std::{fmt::Display, ops::AddAssign};
 
 use crate::core::engine::{CheckType, Game, GameEndState, Move, MoveType};
 
-
 #[derive(Debug, Default)]
 pub struct PERFResult {
     all: usize,

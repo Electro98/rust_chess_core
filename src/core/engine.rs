@@ -638,8 +638,8 @@ impl Board {
     pub fn obstruct(self, player: Color) -> Self {
         let mask = self.obstruct_board(player);
         let mut obstructed_board = self;
-        for file in 0..8u8 {
-            for rank in 0..8u8 {
+        for rank in 0..8u8 {
+            for file in 0..8u8 {
                 let pos = rank << 4 | file;
                 if mask[file as usize][rank as usize] {
                     obstructed_board.arr[pos as usize] = 0x00;
@@ -649,10 +649,12 @@ impl Board {
         obstructed_board
     }
 
+    #[inline]
     pub fn iter<'a>(&'a self) -> impl Iterator<Item = u8> + 'a {
         ITER_INDEX.iter().map(|&i| self.arr[i])
     }
 
+    #[inline]
     pub fn iter_pieces<'a>(&'a self) -> impl Iterator<Item = Piece> + 'a {
         ITER_INDEX
             .iter()
@@ -661,14 +663,14 @@ impl Board {
 
     pub fn compress(&self) -> CompressedBoard {
         let mut compressed_board = [0; 8];
-        for file in 0..8u8 {
-            let mut row: u32 = 0;
-            for rank in 0..8u8 {
-                let pos = (rank << 4 | file) as usize;
+        for rank in 0..8u8 {
+            let mut col: u32 = 0;
+            for file in 0..8u8 {
+                let pos = compact_pos(rank, file) as usize;
                 let cell = self.arr[pos] & 0x80 >> 4 | self.arr[pos] & 0x05;
-                row |= (cell as u32) << (rank * 4);
+                col |= (cell as u32) << (file * 4);
             }
-            compressed_board[file as usize] = row;
+            compressed_board[rank as usize] = col;
         }
         compressed_board
     }
@@ -679,14 +681,14 @@ impl Default for Board {
     fn default() -> Self {
         Board {
             arr: [
-                0x04, 0x02, 0x03, 0x05, 0x06, 0x03, 0x02, 0x04, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-                0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-                0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
                 0x84, 0x82, 0x83, 0x85, 0x86, 0x83, 0x82, 0x84, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                0x04, 0x02, 0x03, 0x05, 0x06, 0x03, 0x02, 0x04, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
             ]
         }
     }
@@ -697,7 +699,7 @@ const ITER_INDEX: [usize; 64] = {
     let mut file = 0;
     let mut rank = 0;
     while file < 8 {
-        arr[file * 8 + rank] = rank << 4 | file;
+        arr[rank * 8 + file] = rank << 4 | file;
         if rank < 7 {
             rank += 1;
         } else {
@@ -817,23 +819,23 @@ pub enum GameEndState {
 }
 
 fn flag_piece_moved(piece: PieceType, color: Color, pos: u8) -> u8 {
-    let (file, rank): (u8, u8) = unpack_pos(pos);
-    let right_rank = match piece {
+    let (rank, file): (u8, u8) = unpack_pos(pos);
+    let right_file = match piece {
         PieceType::Pawn => true,
-        PieceType::Rook => rank == 0x0 || rank == 0x7,
-        PieceType::Knight => rank == 0x1 || rank == 0x6,
-        PieceType::Bishop => rank == 0x2 || rank == 0x5,
-        PieceType::Queen => rank == 0x3,
-        PieceType::King => rank == 0x4,
+        PieceType::Rook => file == 0x0 || file == 0x7,
+        PieceType::Knight => file == 0x1 || file == 0x6,
+        PieceType::Bishop => file == 0x2 || file == 0x5,
+        PieceType::Queen => file == 0x3,
+        PieceType::King => file == 0x4,
         PieceType::EmptySquare => true,
         PieceType::Invalid => unreachable!("Created an invalid piece?"),
     };
     let is_pawn = matches!(piece, PieceType::Pawn);
-    let right_file = match color {
-        Color::Black => (is_pawn && file == 0x01) || (!is_pawn && file == 0x00),
-        Color::White => (is_pawn && file == 0x06) || (!is_pawn && file == 0x07),
+    let right_rank = match color {
+        Color::Black => (is_pawn && rank == 0x01) || (!is_pawn && rank == 0x00),
+        Color::White => (is_pawn && rank == 0x06) || (!is_pawn && rank == 0x07),
     };
-    if right_rank && right_file {
+    if right_file && right_rank {
         0
     } else {
         PieceFlag::Moved as u8
@@ -845,7 +847,7 @@ impl Game {
         let mut chars = fen.chars();
         let mut board = Board::new();
         // Board portion
-        for rank in 0..8 {
+        for rank in (0..8).rev() {
             let mut file = 0;
             while let Some(letter) = chars.next() {
                 if let Some(num) = letter.to_digit(10) {
@@ -937,12 +939,10 @@ impl Game {
                     _ => return Err("Error in move file".to_string()),
                 };
                 let mut rank = chars.next().unwrap() as u8 - '0' as u8;
-                if current_player == Color::White {
+                if current_player == Color::Black {
                     rank -= 1;
-                } else {
-                    // rank += 1;
                 }
-                let pos = compact_pos(8 - rank, file);
+                let pos = compact_pos(rank, file);
                 let piece = Piece::from_code(board.arr[pos as usize], pos);
                 if piece.type_() == PieceType::Pawn {
                     Some(Move {
@@ -1411,8 +1411,8 @@ impl Game {
 
 /** Bits structure of piece code
  * Bit 7 -- Color of the piece
- * - 1 -- Black
- * - 0 -- White
+ * - 0 -- Black
+ * - 1 -- White
  * Bit 6 -- Unknown flag
  * Bit 5 -- Castle flag for Kings only - QueenSide
  * Bit 4 -- Castle flag for Kings only - KingSide

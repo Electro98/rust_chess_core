@@ -1,4 +1,3 @@
-
 use self::core::engine::{Board, CheckType, Game, GameEndState, Move, MoveType, Piece};
 use self::core::game::ui_board;
 use self::core::utils::{
@@ -20,8 +19,8 @@ fn test_iters() {
     let board = Board::default();
     let mut iter = board.iter();
     let mut iter_pieces = board.iter_pieces();
-    for file in 0..8u8 {
-        for rank in 0..8u8 {
+    for rank in 0..8u8 {
+        for file in 0..8u8 {
             let pos = rank << 4 | file;
             let code = board.inside()[pos as usize];
             let piece = Piece::from_code(code, pos);

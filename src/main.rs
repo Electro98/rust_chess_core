@@ -1,6 +1,6 @@
 use chess_engine::{
-    engine::{CheckType, Game, GameEndState, Move, Piece},
-    utils::unpack_pos,
+    core::engine::{CheckType, Game, GameEndState, Move, Piece},
+    core::utils::unpack_pos,
     Color, PieceType,
 };
 use eframe::{egui, epaint::Vec2};
@@ -105,7 +105,7 @@ impl App {
             .max_col_width(self.cell_size)
             .min_row_height(self.cell_size)
             .show(ui, |ui| {
-                for rank in 0..8 {
+                for rank in (0..8).rev() {
                     for file in 0..8 {
                         let piece = board.get(rank, file);
                         let btn = if let Some(source) = piece_image(&piece) {
