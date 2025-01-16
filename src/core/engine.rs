@@ -344,8 +344,8 @@ impl Board {
         let attackers: Vec<_> = self
             .iter_pieces()
             .filter(|piece| {
-                piece.type_().is_valid()
-                    && piece.color() != target.color()
+                piece.color() != target.color()
+                    && piece.type_().is_valid()
                     && piece.can_attack(target.position, self.arr)
             })
             .collect();
@@ -359,9 +359,8 @@ impl Board {
     fn count_pinned_pieces(&self, target: Piece) -> Vec<(Piece, Piece)> {
         let pinned_pieces: Vec<_> = self
             .iter_pieces()
-            .filter(|piece| piece.type_().is_valid() && piece.color() != target.color())
             .filter(|attacker| {
-                match attacker.type_() {
+                attacker.color() != target.color() && match attacker.type_() {
                     PieceType::Bishop => is_in_diagonal_line(attacker.position, target.position),
                     PieceType::Rook => is_in_straight_line(attacker.position, target.position),
                     PieceType::Queen => {
@@ -373,29 +372,29 @@ impl Board {
                 }
             })
             .filter_map(|attacker| {
-                between(attacker.position, target.position)
-                    .map(|pos| Piece::from_code(self.arr[pos as usize], pos))
-                    .filter(|piece| piece.code != 0x00)
-                    .enumerate()
-                    .last()
-                    .map(|(i, piece)| {
-                        if i != 0 {
-                            None
+                let mut pinned_piece = None;
+                for pos in between(attacker.position, target.position) {
+                    let code = self.arr[pos as usize];
+                    if code != 0x00 {
+                        if pinned_piece.is_none() {
+                            pinned_piece = Some(Piece::from_code(code, pos));
                         } else {
-                            Some((piece, attacker))
+                            pinned_piece = None;
+                            break;
                         }
-                    })
-                    .flatten()
+                    }
+                }
+                pinned_piece.map(|piece| (piece, attacker))
             })
             .collect();
         pinned_pieces
     }
 
-    fn is_attacked(&self, position: u8, color: Color) -> bool {
+    fn is_attacked(&self, position: u8, by_color: Color) -> bool {
         self.iter_pieces()
             .find(|piece| {
-                piece.type_().is_valid()
-                    && piece.color() == color
+                piece.color() == by_color
+                    && piece.type_().is_valid()
                     && piece.can_attack(position, self.arr)
             })
             .is_some()
@@ -1004,18 +1003,22 @@ impl Game {
         };
         let mut possible_moves = Vec::with_capacity(256);
         // Count pinned pieces
-        let king = self
-            .board
-            .iter_pieces()
-            .find(|piece| piece.color() == self.current_player && piece.type_() == PieceType::King)
-            .expect("King of current player should be present to make a move");
+        let (king, enemy_king) = {
+            let mut king = None;
+            let mut enemy_king = None;
+            for piece in self.board.iter_pieces() {
+                if matches!(piece.type_(), PieceType::King) {
+                    if piece.color() == self.current_player {
+                        king = Some(piece);
+                    } else {
+                        enemy_king = Some(piece);
+                    }
+                }
+            }
+            (king.expect("King of current player should be present to make a move"), enemy_king)
+        };
         let king_in_check = self.history.last_move().map(|_move| _move.check);
         let pinned_pieces = self.board.count_pinned_pieces(king);
-
-        let enemy_king = self
-            .board
-            .iter_pieces()
-            .find(|piece| piece.color() != self.current_player && piece.type_() == PieceType::King);
 
         for piece in self
             .board

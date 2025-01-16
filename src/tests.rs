@@ -146,9 +146,10 @@ fn fen_parsing() {
 }
 
 macro_rules! perf_tests {
-    ($fen_string:literal $($name:ident: $value:expr)*) => {
+    ($fen_string:literal $($(#[$attr:meta])* $name:ident: $value:expr)*) => {
     $(
         #[test]
+        $(#[$attr])*
         fn $name() {
             let fen_string = $fen_string;
             let (expected, depth) = $value;
@@ -164,8 +165,8 @@ perf_tests! {
     perft_base_2: (8902, 3)
     perft_base_3: (197_281, 4)
     perft_base_4: (4_865_609, 5)
-    perft_base_5: (119_060_324, 6)
-    // perft_base_6: (3_195_901_860, 7)
+    #[ignore="slow"] perft_base_5: (119_060_324, 6)
+    #[ignore="slow"] perft_base_6: (3_195_901_860, 7)
 }
 
 perf_tests! {
@@ -173,6 +174,6 @@ perf_tests! {
     perft_kiwipete_1: (2039, 2)
     perft_kiwipete_2: (97_862, 3)
     perft_kiwipete_3: (4_085_603, 4)
-    perft_kiwipete_4: (193_690_690, 5)
-    // perft_kiwipete_5: (8_031_647_685, 6)
+    #[ignore="slow"] perft_kiwipete_4: (193_690_690, 5)
+    #[ignore="slow"] perft_kiwipete_5: (8_031_647_685, 6)
 }
