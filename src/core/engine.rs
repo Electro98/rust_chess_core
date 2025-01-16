@@ -274,8 +274,8 @@ impl Board {
                     "That's a bug! Pawn captured teammate!"
                 );
                 let step: u8 = match piece.color() {
-                    Color::Black => 0x10,
-                    Color::White => 0xf0,
+                    Color::Black => 0xf0,
+                    Color::White => 0x10,
                 };
                 assert!(
                     self.arr[target.position.wrapping_add(step) as usize] == 0x00,
@@ -330,8 +330,8 @@ impl Board {
             }
             EnPassantCapture(target) => {
                 let step: u8 = match piece.color() {
-                    Color::Black => 0x10,
-                    Color::White => 0xf0,
+                    Color::Black => 0xf0,
+                    Color::White => 0x10,
                 };
                 self.arr[target.position.wrapping_add(step) as usize] = 0x00;
                 self.arr[piece.position()] = piece.code;
@@ -466,8 +466,8 @@ impl Board {
                     PieceType::Invalid => unreachable!(),
                     PieceType::Pawn => {
                         let step: u8 = match player {
-                            Color::Black => 0x10,
-                            Color::White => 0xf0,
+                            Color::Black => 0xf0,
+                            Color::White => 0x10,
                         };
                         // push
                         let front_pos: u8 = piece.position.wrapping_add(step);
@@ -554,8 +554,8 @@ impl Board {
                 PieceType::Invalid => unreachable!(),
                 PieceType::Pawn => {
                     let step: u8 = match piece.color() {
-                        Color::Black => 0x10,
-                        Color::White => 0xf0,
+                        Color::Black => 0xf0,
+                        Color::White => 0x10,
                     };
                     // push
                     let front_pos: u8 = piece.position.wrapping_add(step);
@@ -832,8 +832,8 @@ fn flag_piece_moved(piece: PieceType, color: Color, pos: u8) -> u8 {
     };
     let is_pawn = matches!(piece, PieceType::Pawn);
     let right_rank = match color {
-        Color::Black => (is_pawn && rank == 0x01) || (!is_pawn && rank == 0x00),
-        Color::White => (is_pawn && rank == 0x06) || (!is_pawn && rank == 0x07),
+        Color::Black => (is_pawn && rank == 0x06) || (!is_pawn && rank == 0x07),
+        Color::White => (is_pawn && rank == 0x01) || (!is_pawn && rank == 0x00),
     };
     if right_file && right_rank {
         0
@@ -1041,8 +1041,8 @@ impl Game {
                 // Special cases
                 PieceType::Pawn => {
                     let step: u8 = match self.current_player {
-                        Color::Black => 0x10,
-                        Color::White => 0xf0,
+                        Color::Black => 0xf0,
+                        Color::White => 0x10,
                     };
                     // push
                     let front_pos: u8 = piece.position.wrapping_add(step);
@@ -1497,8 +1497,8 @@ impl Piece {
         match self.type_() {
             PieceType::Pawn => {
                 let step: u8 = match self.color() {
-                    Color::White => 0xf0,
-                    Color::Black => 0x10,
+                    Color::White => 0x10,
+                    Color::Black => 0xf0,
                 };
                 distance(self.position, target) == 2
                     && self.position.wrapping_add(step) & 0xf0 == target & 0xf0
