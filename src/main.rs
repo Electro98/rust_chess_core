@@ -1,6 +1,5 @@
 use chess_engine::{
-    core::engine::{CheckType, Game, GameEndState, Move, Piece},
-    core::utils::unpack_pos,
+    core::{engine::{Board, CheckType, Game, GameEndState, Move, MoveType, Piece}, utils::unpack_pos},
     Color, PieceType,
 };
 use eframe::{egui, epaint::Vec2};
@@ -30,10 +29,13 @@ fn main() -> Result<(), eframe::Error> {
             // This gives us image support:
             egui_extras::install_image_loaders(&cc.egui_ctx);
 
-            let game = Game::from_fen(
-                "r3k2r/p2p1pb1/bn1qpnp1/2pPN3/1p2P3/2N1BQ1p/PPP1BPPP/R2K3R w kq c6 0 1",
-            )
-            .unwrap();
+            // let game = Game::from_fen(
+            //     "8/8/3p4/1Pp4r/1KR2pk1/8/4P1P1/8 w - c6 0 1",
+            // )
+            // .unwrap();
+            let game = Game::new_debug(Board::new_debug(&[
+                0, 0, 0, 0, 0, 0, 0, 138, 0, 0, 0, 0, 0, 0, 0, 129, 0, 0, 0, 0, 9, 0, 0, 142, 0, 9, 0, 0, 0, 0, 0, 138, 137, 0, 9, 11, 9, 0, 0, 0, 9, 0, 0, 0, 0, 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 0, 139, 0, 0, 12, 0, 
+            ]), Color::Black, None);
             dbg!(&game);
             Box::new(App {
                 cell_size: 45.0,

@@ -79,7 +79,7 @@ fn count_perf_result(moves: Vec<Move>) -> PERFResult {
                 result.promotions += 1;
             }
             MoveType::PawnDoublePush(_) => (),
-            MoveType::EnPassantCapture(_) => {
+            MoveType::EnPassantCapture(_, _) => {
                 result.captures += 1;
                 result.en_passaunt += 1;
             }

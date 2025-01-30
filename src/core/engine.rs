@@ -32,11 +32,11 @@ pub enum MoveType {
     PromotionCapture(Piece, PieceType),
     /** who is moving, where it's moving */
     PawnDoublePush(u8),
-    /** who is capturing, whom is beeing captured */
-    EnPassantCapture(Piece),
+    /** who is capturing, whom is beeing captured, where to move */
+    EnPassantCapture(Piece, u8),
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum CheckType {
     None,
     Direct,
@@ -64,6 +64,15 @@ pub struct Move {
 }
 
 impl Move {
+    #[cfg(debug_assertions)]
+    pub fn new_debug(piece: Piece, move_type: MoveType, check: CheckType) -> Move {
+        Move {
+            piece,
+            move_type,
+            check,
+        }
+    }
+
     pub fn piece(&self) -> &Piece {
         &self.piece
     }
@@ -76,7 +85,7 @@ impl Move {
             MoveType::PromotionQuiet(pos, _) => *pos,
             MoveType::PromotionCapture(piece, _) => piece.position() as u8,
             MoveType::PawnDoublePush(pos) => *pos,
-            MoveType::EnPassantCapture(piece) => piece.position() as u8,
+            MoveType::EnPassantCapture(_, pos) => *pos,
         }
     }
 
@@ -142,6 +151,17 @@ impl Board {
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
             ]
         }
+    }
+
+    #[cfg(debug_assertions)]
+    pub fn new_debug(arr: &[u8; 64]) -> Board {
+        let mut board = Self::new();
+        for i in 0..8 {
+            for j in 0..8 {
+                board.arr[compact_pos(j, i) as usize] = arr[(j * 8 + i) as usize];
+            }
+        }
+        board
     }
 
     pub fn inside(&self) -> &[u8; 128] {
@@ -260,7 +280,7 @@ impl Board {
                     }
                 }
             }
-            EnPassantCapture(target) => {
+            EnPassantCapture(target, new_pos) => {
                 assert!(
                     piece.type_() == PieceType::Pawn,
                     "Trying to use EnPassant by non-pawn piece!"
@@ -273,17 +293,13 @@ impl Board {
                     piece.color() != target.color(),
                     "That's a bug! Pawn captured teammate!"
                 );
-                let step: u8 = match piece.color() {
-                    Color::Black => 0xf0,
-                    Color::White => 0x10,
-                };
                 assert!(
-                    self.arr[target.position.wrapping_add(step) as usize] == 0x00,
+                    self.arr[new_pos as usize] == 0x00,
                     "Something is in way of EnPassant!"
                 );
                 self.arr[piece.position()] = 0x00;
                 self.arr[target.position()] = 0x00;
-                self.arr[target.position.wrapping_add(step) as usize] = piece.code;
+                self.arr[new_pos as usize] = piece.code;
             }
         }
     }
@@ -328,12 +344,8 @@ impl Board {
                 self.arr[piece.position()] = piece.code;
                 self.arr[rook.position()] = rook.code;
             }
-            EnPassantCapture(target) => {
-                let step: u8 = match piece.color() {
-                    Color::Black => 0xf0,
-                    Color::White => 0x10,
-                };
-                self.arr[target.position.wrapping_add(step) as usize] = 0x00;
+            EnPassantCapture(target, new_pos) => {
+                self.arr[new_pos as usize] = 0x00;
                 self.arr[piece.position()] = piece.code;
                 self.arr[target.position()] = target.code;
             }
@@ -356,28 +368,44 @@ impl Board {
         }
     }
 
-    fn count_pinned_pieces(&self, target: Piece) -> Vec<(Piece, Piece)> {
+    fn count_pinned_pieces(
+        &self,
+        target_king: Piece,
+        enpassant_pawn: Option<u8>,
+    ) -> Vec<(Piece, Piece)> {
         let pinned_pieces: Vec<_> = self
             .iter_pieces()
             .filter(|attacker| {
-                attacker.color() != target.color() && match attacker.type_() {
-                    PieceType::Bishop => is_in_diagonal_line(attacker.position, target.position),
-                    PieceType::Rook => is_in_straight_line(attacker.position, target.position),
-                    PieceType::Queen => {
-                        is_in_diagonal_line(attacker.position, target.position)
-                            || is_in_straight_line(attacker.position, target.position)
+                attacker.color() != target_king.color()
+                    && match attacker.type_() {
+                        PieceType::Bishop => {
+                            is_in_diagonal_line(attacker.position, target_king.position)
+                        }
+                        PieceType::Rook => {
+                            is_in_straight_line(attacker.position, target_king.position)
+                        }
+                        PieceType::Queen => {
+                            is_in_diagonal_line(attacker.position, target_king.position)
+                                || is_in_straight_line(attacker.position, target_king.position)
+                        }
+                        // No one else cannot pin another piece
+                        _ => false,
                     }
-                    // No one else cannot pin another piece
-                    _ => false,
-                }
             })
             .filter_map(|attacker| {
                 let mut pinned_piece = None;
-                for pos in between(attacker.position, target.position) {
+                // TODO: Remove?
+                let mut possible_enpassant = false;
+                for pos in between(attacker.position, target_king.position) {
                     let code = self.arr[pos as usize];
                     if code != 0x00 {
                         if pinned_piece.is_none() {
-                            pinned_piece = Some(Piece::from_code(code, pos));
+                            let piece = Piece::from_code(code, pos);
+                            possible_enpassant = piece.type_() == PieceType::Pawn
+                                && enpassant_pawn
+                                    .map_or(false, |pawn| is_in_straight_line(pos, pawn));
+                            pinned_piece = Some(piece);
+                        // } else if possible_enpassant && matches!(PieceType::from_byte(code), PieceType::Pawn) && is_in_straight_line(enpassant_pawn.unwrap(), pos) {
                         } else {
                             pinned_piece = None;
                             break;
@@ -842,6 +870,20 @@ fn flag_piece_moved(piece: PieceType, color: Color, pos: u8) -> u8 {
 }
 
 impl Game {
+    #[cfg(debug_assertions)]
+    pub fn new_debug(board: Board, current_player: Color, last_move: Option<Move>) -> Game {
+        Game {
+            board,
+            current_player,
+            history: GameHistory::FullHistory(if let Some(_move) = last_move {
+                vec![_move]
+            } else {
+                Vec::new()
+            }),
+            ..Default::default()
+        }
+    }
+
     pub fn from_fen(fen: &str) -> Result<Game, String> {
         let mut chars = fen.chars();
         let mut board = Board::new();
@@ -938,8 +980,8 @@ impl Game {
                     _ => return Err("Error in move file".to_string()),
                 };
                 let mut rank = chars.next().unwrap() as u8 - '0' as u8;
-                if current_player == Color::Black {
-                    rank -= 1;
+                if current_player == Color::White {
+                    rank -= 2;
                 }
                 let pos = compact_pos(rank, file);
                 let piece = Piece::from_code(board.arr[pos as usize], pos);
@@ -969,6 +1011,12 @@ impl Game {
             .collect();
         if let Some(check) = match attackers.len() {
             0 => None,
+            1 if last_move
+                .as_ref()
+                .map_or(false, |_move| _move.end_position() == attackers[0].position) =>
+            {
+                Some(CheckType::Direct)
+            }
             1 => Some(CheckType::Discovered),
             _ => Some(CheckType::Double),
         } {
@@ -1013,12 +1061,18 @@ impl Game {
                     } else {
                         enemy_king = Some(piece);
                     }
+                    if king.is_some() && enemy_king.is_some() {
+                        break;
+                    }
                 }
             }
-            (king.expect("King of current player should be present to make a move"), enemy_king)
+            (
+                king.expect("King of current player should be present to make a move"),
+                enemy_king,
+            )
         };
         let king_in_check = self.history.last_move().map(|_move| _move.check);
-        let pinned_pieces = self.board.count_pinned_pieces(king);
+        let pinned_pieces = self.board.count_pinned_pieces(king, None);
 
         for piece in self
             .board
@@ -1113,14 +1167,36 @@ impl Game {
                         if pawn_pos.abs_diff(piece.position) == 0x01
                             && attacker.map_or(true, |attacker| attacker.position == *pawn_pos)
                         {
-                            possible_moves.push(Move {
+                            let step: u8 = match piece.color() {
+                                Color::Black => 0xf0,
+                                Color::White => 0x10,
+                            };
+                            let enpassant = Move {
                                 piece,
-                                move_type: MoveType::EnPassantCapture(Piece::from_code(
-                                    self.board.arr[*pawn_pos as usize],
-                                    *pawn_pos,
-                                )),
+                                move_type: MoveType::EnPassantCapture(
+                                    Piece::from_code(self.board.arr[*pawn_pos as usize], *pawn_pos),
+                                    pawn_pos.wrapping_add(step),
+                                ),
                                 check: CheckType::None,
-                            })
+                            };
+                            let mut temp_board = self.board.clone();
+                            temp_board.execute(enpassant.clone());
+                            if !temp_board
+                                .is_attacked(king.position, self.current_player.opposite())
+                            {
+                                // temp_board.arr[pawn_pos.wrapping_add(step) as usize] = 0xff;
+                                possible_moves.push(Move {
+                                    check: if enemy_king.map_or(false, |enemy_king| {
+                                        temp_board
+                                            .is_attacked(enemy_king.position, self.current_player)
+                                    }) {
+                                        CheckType::Discovered
+                                    } else {
+                                        CheckType::None
+                                    },
+                                    ..enpassant
+                                });
+                            }
                         }
                     }
                 }
@@ -1259,10 +1335,16 @@ impl Game {
             king_in_check,
             Some(CheckType::Direct) | Some(CheckType::Discovered)
         ) {
-            let attack_pieces = self
-                .board
-                .who_can_attack(king)
-                .expect("Incorrect check: attacker is not found");
+            // let attack_pieces = self
+            //     .board
+            //     .who_can_attack(king)
+            //     .expect("Incorrect check: attacker is not found");
+            let attack_pieces = if let Some(pieces) = self.board.who_can_attack(king) {
+                pieces
+            } else {
+                println!("debug");
+                panic!("Incorrect check: attacker is not found");
+            };
             assert!(
                 attack_pieces.len() == 1,
                 "There can be only one piece to attack the king"
@@ -1278,11 +1360,10 @@ impl Game {
             };
             possible_moves = possible_moves
                 .into_iter()
-                .filter(|_move| {
-                    if _move.piece().type_() == PieceType::King {
-                        true
-                    } else {
-                        // This If just to make more sense
+                .filter(|_move| match _move.move_type() {
+                    _ if _move.piece().type_() == PieceType::King => true,
+                    MoveType::EnPassantCapture(pawn, _) if pawn == &attacker => true,
+                    _ => {
                         possible_positions.contains(&_move.end_position())
                             || _move.end_position() == attacker.position
                     }
@@ -1320,7 +1401,7 @@ impl Game {
         // Find discovery checks and direct checks
         // This can be not executed on dark chess client
         if let Some(enemy_king) = enemy_king {
-            let pinned_pieces = self.board.count_pinned_pieces(enemy_king);
+            let pinned_pieces = self.board.count_pinned_pieces(enemy_king, enpassant_pawn);
             for _move in possible_moves.iter_mut() {
                 let direct_check = match _move.move_type {
                     MoveType::PromotionQuiet(_, new_type)
@@ -1336,14 +1417,15 @@ impl Game {
                     _ => Piece::from_code(_move.piece().code, _move.end_position())
                         .can_attack(enemy_king.position, self.board.arr),
                 };
-                let discovered_check = pinned_pieces
-                    .iter()
-                    .find(|(piece, _)| piece == _move.piece())
-                    .map_or(false, |(_, attacker)| {
-                        between(enemy_king.position, attacker.position)
-                            .find(|pos| *pos == _move.end_position())
-                            .is_none()
-                    });
+                let discovered_check = matches!(_move.check(), CheckType::Discovered)
+                    || pinned_pieces
+                        .iter()
+                        .find(|(piece, _)| piece == _move.piece())
+                        .map_or(false, |(_, attacker)| {
+                            between(enemy_king.position, attacker.position)
+                                .find(|pos| *pos == _move.end_position())
+                                .is_none()
+                        });
                 _move.check = CheckType::from_bools(direct_check, discovered_check);
             }
         }
@@ -1368,6 +1450,18 @@ impl Game {
             _ => self.existed_positions.clear(),
         }
         self.existed_positions.push(compressed_board);
+        #[cfg(debug_assertions)]
+        {
+            let current_check = self.current_check_state();
+            let check_from_move = _move.check();
+            if current_check != check_from_move {
+                let _ = self.current_check_state();
+                println!("Current Player: {}", self.current_player);
+                println!("Last move: {:?}", self.history.last_move());
+                println!("Board: {:?}", self.board());
+                panic!("Got different check type current: {current_check:?} from move: {check_from_move:?}");
+            }
+        }
         if self.get_possible_moves(false).is_empty() {
             match _move.check {
                 CheckType::None => Some(GameEndState::DrawStalemate),
@@ -1388,6 +1482,52 @@ impl Game {
         self.history.unrecord();
         self.current_player = self.current_player.opposite();
         Ok(())
+    }
+
+    fn current_check_state(&self) -> CheckType {
+        let king = if let Some(king) = self
+            .board
+            .iter_pieces()
+            .find(|piece| piece.color() == self.current_player && piece.type_() == PieceType::King) {
+                king
+            } else {
+                let mut last_board = self.board.clone();
+                last_board.undo(self.history.last_move().unwrap());
+                println!("Last player: {}", self.current_player.opposite());
+                println!("Board: {:?}", last_board);
+                panic!("King of the current player should be present to make check of danger");
+            };
+        match self.board.who_can_attack(king) {
+            Some(attackers) => match attackers.len() {
+                0 => unreachable!("This is just bug!"),
+                1 => {
+                    let attacker = attackers[0];
+                    if self.history.last_move().map_or(false, |last_move| {
+                        let last_piece = match last_move.move_type() {
+                            MoveType::PromotionCapture(_, new_type)
+                            | MoveType::PromotionQuiet(_, new_type) => Piece::from_code(
+                                last_move.piece.color() as u8
+                                    | *new_type as u8
+                                    | PieceFlag::Moved as u8,
+                                last_move.end_position(),
+                            ),
+                            _ => Piece::from_code(
+                                last_move.piece.code | PieceFlag::Moved as u8,
+                                last_move.end_position(),
+                            ),
+                        };
+                        last_piece == attacker
+                    }) {
+                        CheckType::Direct
+                    } else {
+                        CheckType::Discovered
+                    }
+                }
+                2 => CheckType::Double,
+                _ => unreachable!("Should not be possiable in legal chess game"),
+            },
+            None => CheckType::None,
+        }
     }
 
     pub fn light_clone(&self) -> Self {
@@ -1529,7 +1669,11 @@ impl Piece {
                 let diff = (self.position & 0x0f).abs_diff(target & 0x0f);
                 distance(self.position, target) == 3 && diff != 0 && diff != 3
             }
-            PieceType::King => distance(self.position, target) == 1,
+            PieceType::King => {
+                let rank_diff = (self.position & 0xf0).abs_diff(target & 0xf0) >> 4;
+                let file_diff = (self.position & 0x0f).abs_diff(target & 0x0f);
+                (0 == rank_diff || rank_diff == 1) && (0 == file_diff || 1 == file_diff) 
+            },
             PieceType::Invalid => panic!("Invalid square is trying to attack?!"),
             PieceType::EmptySquare => panic!("Empty square is trying to attack?!"),
         }
