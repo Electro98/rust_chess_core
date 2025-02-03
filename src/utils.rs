@@ -112,7 +112,7 @@ fn perf_test_step_undo(game: &mut Game, depth: usize) -> PERFResult {
     } else {
         let mut result = PERFResult::default();
         for _move in possible_moves.into_iter() {
-            result += if let Some(end_state) = game.execute(_move, true) {
+            result += if let Some(end_state) = game.execute(_move) {
                 game.undo_last_move().expect("Failed to undo valid move");
                 PERFResult {
                     checkmates: if matches!(end_state, GameEndState::CheckMate) {
@@ -146,7 +146,7 @@ fn perf_test_step_copy(game: Game, depth: usize) -> PERFResult {
             .into_iter()
             .map(|_move| {
                 let mut game = game.light_clone();
-                if let Some(end_state) = game.execute(_move, true) {
+                if let Some(end_state) = game.execute(_move) {
                     PERFResult {
                         checkmates: if matches!(end_state, GameEndState::CheckMate) {
                             1
@@ -178,7 +178,7 @@ pub fn perf_test(
         let mut total: PERFResult = Default::default();
         for _move in game.get_possible_moves(true) {
             let mut temp_game = game.clone();
-            temp_game.execute(_move.clone(), true);
+            temp_game.execute(_move.clone());
             let result = if undo {
                 perf_test_step_undo(&mut temp_game, depth - 1)
             } else {

@@ -1,5 +1,9 @@
 use chess_engine::{
-    core::{engine::{Board, CheckType, Game, GameEndState, Move, MoveType, Piece}, utils::unpack_pos},
+    core::{
+        definitions::ImplicitMove,
+        engine::{Board, CheckType, Game, GameEndState, Move, MoveType, Piece},
+        utils::unpack_pos,
+    },
     Color, PieceType,
 };
 use eframe::{egui, epaint::Vec2};
@@ -14,6 +18,7 @@ struct App {
     chosen_figure: Option<Piece>,
     selected_cell: Option<(usize, usize)>,
     moves: Option<Vec<Move>>,
+    promotion_type: PieceType,
 }
 
 fn main() -> Result<(), eframe::Error> {
@@ -33,9 +38,19 @@ fn main() -> Result<(), eframe::Error> {
             //     "8/8/3p4/1Pp4r/1KR2pk1/8/4P1P1/8 w - c6 0 1",
             // )
             // .unwrap();
-            let game = Game::new_debug(Board::new_debug(&[
-                0, 0, 0, 0, 0, 0, 0, 138, 0, 0, 0, 0, 0, 0, 0, 129, 0, 0, 0, 0, 9, 0, 0, 142, 0, 9, 0, 0, 0, 0, 0, 138, 137, 0, 9, 11, 9, 0, 0, 0, 9, 0, 0, 0, 0, 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 0, 139, 0, 0, 12, 0, 
-            ]), Color::Black, None);
+            let game = Game::new_debug(
+                Board::new_debug(&[
+                    0, 0, 0, 0, 0, 0, 13, 0, 129, 139, 129, 0, 9, 142, 0, 12, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 140, 0, 0, 0, 0, 137, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 139, 0, 0, 0, 0, 0, 0, 11, 14, 138, 0, 0, 0,
+                ]),
+                Color::White,
+                Some(Move::new_debug(
+                    Piece::from_code(9, 22),
+                    MoveType::PromotionQuiet(6, PieceType::Queen),
+                    CheckType::Direct,
+                )),
+            );
             dbg!(&game);
             Box::new(App {
                 cell_size: 45.0,
@@ -44,6 +59,7 @@ fn main() -> Result<(), eframe::Error> {
                 chosen_figure: None,
                 selected_cell: None,
                 moves: None,
+                promotion_type: PieceType::Queen,
             })
         }),
     )
@@ -82,11 +98,17 @@ impl eframe::App for App {
                             self.moves = None;
                         };
                     }
+                    ui.radio_value(&mut self.promotion_type, PieceType::Queen, "Queen");
+                    ui.radio_value(&mut self.promotion_type, PieceType::Rook, "Rook");
+                    ui.radio_value(&mut self.promotion_type, PieceType::Bishop, "Bishop");
+                    ui.radio_value(&mut self.promotion_type, PieceType::Knight, "Third");
                 });
-                if let Some(_move) = move_to_exec {
-                    // TODO: bot: false
-                    println!(" - move: {_move}");
-                    self.end_state = self.game.execute(_move, true);
+                if let Some(mut _move) = move_to_exec {
+                    if _move.promotion() {
+                        _move.set_promotion_type(self.promotion_type);
+                    }
+                    println!(" - move: {_move} {_move:?}");
+                    self.end_state = self.game.execute(_move);
                     // if self.game.history().last_move().unwrap().check() != CheckType::None {
                     //     dbg!(self.game.board())
                     // }

@@ -117,10 +117,10 @@ impl ImplicitMove for Move {
         )
     }
 
-    fn set_promotion_type(&mut self, king: PieceType) {
+    fn set_promotion_type(&mut self, new_type: PieceType) {
         match &mut self.move_type {
-            MoveType::PromotionQuiet(_, _type) => *_type = king,
-            MoveType::PromotionCapture(_, _type) => *_type = king,
+            MoveType::PromotionQuiet(_, _type) => *_type = new_type,
+            MoveType::PromotionCapture(_, _type) => *_type = new_type,
             _ => panic!("`set_promotion_type` on non-promotion move"),
         }
     }
@@ -1432,13 +1432,44 @@ impl Game {
         possible_moves
     }
 
-    pub fn execute(&mut self, _move: Move, bot: bool) -> Option<GameEndState> {
-        if !bot {
-            // TODO: Recheck promotion moves about king checks
-            todo!()
-        }
+    pub fn execute(&mut self, _move: Move) -> Option<GameEndState> {
         self.current_player = self.current_player.opposite();
         self.board.execute(_move.clone());
+        // Check to see if move caused direct check!
+        let _move = if _move.promotion() {
+            let new_piece = Piece::from_code(
+                self.board.arr[_move.end_position() as usize],
+                _move.end_position(),
+            );
+            assert!(
+                !matches!(
+                    new_piece.type_(),
+                    PieceType::Invalid | PieceType::EmptySquare
+                ),
+                "Something is gone horrible wrong!"
+            );
+            let enemy_king = self
+                .board
+                .iter_pieces()
+                .find(|piece| {
+                    piece.color() == self.current_player && piece.type_() == PieceType::King
+                })
+                .expect("King of the enemy should be present to make check of danger");
+            Move {
+                check: if new_piece.can_attack(enemy_king.position, self.board.arr) {
+                    if matches!(_move.check(), CheckType::Discovered | CheckType::Double) {
+                        CheckType::Double
+                    } else {
+                        CheckType::Direct
+                    }
+                } else {
+                    _move.check
+                },
+                .._move
+            }
+        } else {
+            _move
+        };
         self.history.record(_move.clone());
         let compressed_board = self.board.compress();
         match _move.move_type() {
@@ -1485,10 +1516,10 @@ impl Game {
     }
 
     fn current_check_state(&self) -> CheckType {
-        let king = if let Some(king) = self
-            .board
-            .iter_pieces()
-            .find(|piece| piece.color() == self.current_player && piece.type_() == PieceType::King) {
+        let king =
+            if let Some(king) = self.board.iter_pieces().find(|piece| {
+                piece.color() == self.current_player && piece.type_() == PieceType::King
+            }) {
                 king
             } else {
                 let mut last_board = self.board.clone();
@@ -1672,8 +1703,8 @@ impl Piece {
             PieceType::King => {
                 let rank_diff = (self.position & 0xf0).abs_diff(target & 0xf0) >> 4;
                 let file_diff = (self.position & 0x0f).abs_diff(target & 0x0f);
-                (0 == rank_diff || rank_diff == 1) && (0 == file_diff || 1 == file_diff) 
-            },
+                (0 == rank_diff || rank_diff == 1) && (0 == file_diff || 1 == file_diff)
+            }
             PieceType::Invalid => panic!("Invalid square is trying to attack?!"),
             PieceType::EmptySquare => panic!("Empty square is trying to attack?!"),
         }

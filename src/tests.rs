@@ -126,7 +126,6 @@ fn random_moves_game() {
                 .into_iter()
                 .choose(&mut rand::thread_rng())
                 .unwrap(),
-            true,
         )
     }
     for _ in 0..100 {
