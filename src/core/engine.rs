@@ -81,7 +81,13 @@ impl Move {
         match &self.move_type {
             MoveType::QuietMove(pos) => *pos,
             MoveType::Capture(piece) => piece.position() as u8,
-            MoveType::Castling(_, piece) => piece.position() as u8,
+            MoveType::Castling(side, _) => {
+                let rank = self.piece.position & 0xf0;
+                match side {
+                    CastlingSide::KingSide => rank | 0x06,
+                    CastlingSide::QueenSide => rank | 0x02,
+                }
+            }
             MoveType::PromotionQuiet(pos, _) => *pos,
             MoveType::PromotionCapture(piece, _) => piece.position() as u8,
             MoveType::PawnDoublePush(pos) => *pos,
@@ -1187,8 +1193,18 @@ impl Game {
                                 // temp_board.arr[pawn_pos.wrapping_add(step) as usize] = 0xff;
                                 possible_moves.push(Move {
                                     check: if enemy_king.map_or(false, |enemy_king| {
-                                        temp_board
-                                            .is_attacked(enemy_king.position, self.current_player)
+                                        temp_board.who_can_attack(enemy_king).map_or(
+                                            false,
+                                            |attackers| {
+                                                attackers
+                                                    .into_iter()
+                                                    .find(|attacker| {
+                                                        attacker.position
+                                                            != enpassant.end_position()
+                                                    })
+                                                    .is_some()
+                                            },
+                                        )
                                     }) {
                                         CheckType::Discovered
                                     } else {
@@ -1414,6 +1430,14 @@ impl Game {
                             )
                             .can_attack(enemy_king.position, self.board.arr)
                     }
+                    MoveType::Castling(side, rook) => {
+                        let step = match side {
+                            CastlingSide::KingSide => 0xff,
+                            CastlingSide::QueenSide => 0x01,
+                        };
+                        Piece::from_code(rook.code, _move.end_position().wrapping_add(step))
+                            .can_attack(enemy_king.position, self.board.arr)
+                    }
                     _ => Piece::from_code(_move.piece().code, _move.end_position())
                         .can_attack(enemy_king.position, self.board.arr),
                 };
@@ -1542,6 +1566,16 @@ impl Game {
                                     | PieceFlag::Moved as u8,
                                 last_move.end_position(),
                             ),
+                            MoveType::Castling(side, rook) => {
+                                let step = match side {
+                                    CastlingSide::KingSide => 0xff,
+                                    CastlingSide::QueenSide => 0x01,
+                                };
+                                Piece::from_code(
+                                    rook.code | PieceFlag::Moved as u8,
+                                    last_move.end_position().wrapping_add(step),
+                                )
+                            }
                             _ => Piece::from_code(
                                 last_move.piece.code | PieceFlag::Moved as u8,
                                 last_move.end_position(),

@@ -34,23 +34,23 @@ fn main() -> Result<(), eframe::Error> {
             // This gives us image support:
             egui_extras::install_image_loaders(&cc.egui_ctx);
 
-            // let game = Game::from_fen(
-            //     "8/8/3p4/1Pp4r/1KR2pk1/8/4P1P1/8 w - c6 0 1",
-            // )
-            // .unwrap();
-            let game = Game::new_debug(
-                Board::new_debug(&[
-                    0, 0, 0, 0, 0, 0, 13, 0, 129, 139, 129, 0, 9, 142, 0, 12, 0, 0, 0, 0, 0, 0, 0,
-                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 140, 0, 0, 0, 0, 137, 0, 0, 0, 0, 0, 0, 0, 0,
-                    0, 0, 0, 139, 0, 0, 0, 0, 0, 0, 11, 14, 138, 0, 0, 0,
-                ]),
-                Color::White,
-                Some(Move::new_debug(
-                    Piece::from_code(9, 22),
-                    MoveType::PromotionQuiet(6, PieceType::Queen),
-                    CheckType::Direct,
-                )),
-            );
+            let game = Game::from_fen(
+                "r2k3r/p1p1qpb1/bn2pnp1/4N3/1p2P3/2N1BQ1p/PPP1BPPP/R3K2R w KQ - 0 1",
+            )
+            .unwrap();
+            // let game = Game::new_debug(
+            //     Board::new_debug(&[
+            //         0, 0, 0, 0, 0, 0, 13, 0, 129, 139, 129, 0, 9, 142, 0, 12, 0, 0, 0, 0, 0, 0, 0,
+            //         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 140, 0, 0, 0, 0, 137, 0, 0, 0, 0, 0, 0, 0, 0,
+            //         0, 0, 0, 139, 0, 0, 0, 0, 0, 0, 11, 14, 138, 0, 0, 0,
+            //     ]),
+            //     Color::White,
+            //     Some(Move::new_debug(
+            //         Piece::from_code(9, 22),
+            //         MoveType::PromotionQuiet(6, PieceType::Queen),
+            //         CheckType::Direct,
+            //     )),
+            // );
             dbg!(&game);
             Box::new(App {
                 cell_size: 45.0,
