@@ -38,19 +38,6 @@ fn main() -> Result<(), eframe::Error> {
                 "r2k3r/p1p1qpb1/bn2pnp1/4N3/1p2P3/2N1BQ1p/PPP1BPPP/R3K2R w KQ - 0 1",
             )
             .unwrap();
-            // let game = Game::new_debug(
-            //     Board::new_debug(&[
-            //         0, 0, 0, 0, 0, 0, 13, 0, 129, 139, 129, 0, 9, 142, 0, 12, 0, 0, 0, 0, 0, 0, 0,
-            //         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 140, 0, 0, 0, 0, 137, 0, 0, 0, 0, 0, 0, 0, 0,
-            //         0, 0, 0, 139, 0, 0, 0, 0, 0, 0, 11, 14, 138, 0, 0, 0,
-            //     ]),
-            //     Color::White,
-            //     Some(Move::new_debug(
-            //         Piece::from_code(9, 22),
-            //         MoveType::PromotionQuiet(6, PieceType::Queen),
-            //         CheckType::Direct,
-            //     )),
-            // );
             dbg!(&game);
             Box::new(App {
                 cell_size: 45.0,
@@ -70,39 +57,7 @@ impl eframe::App for App {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.horizontal(|ui| {
                 let move_to_exec = self.grid(ui);
-                ui.vertical(|ui| {
-                    ui.heading("Test chess");
-                    ui.label(format!("Current player: {}", {
-                        if self.game.current_player() == Color::White {
-                            "White"
-                        } else {
-                            "Black"
-                        }
-                    }));
-                    ui.label(format!(
-                        "Is checked: {:?}",
-                        self.game.history().last_move().map(|_move| _move.check())
-                    ));
-                    if ui.button("Undo last move").clicked() && self.game.undo_last_move().is_ok() {
-                        self.end_state = None;
-                        self.chosen_figure = None;
-                        self.moves = None;
-                    }
-                    if let Some(end_state) = self.end_state {
-                        ui.label("Game finished!");
-                        ui.label(format!("Result: {:?}", end_state));
-                        if ui.button("Restart?").clicked() {
-                            self.game = Game::default();
-                            self.end_state = None;
-                            self.chosen_figure = None;
-                            self.moves = None;
-                        };
-                    }
-                    ui.radio_value(&mut self.promotion_type, PieceType::Queen, "Queen");
-                    ui.radio_value(&mut self.promotion_type, PieceType::Rook, "Rook");
-                    ui.radio_value(&mut self.promotion_type, PieceType::Bishop, "Bishop");
-                    ui.radio_value(&mut self.promotion_type, PieceType::Knight, "Third");
-                });
+                self.control_panel(ui);
                 if let Some(mut _move) = move_to_exec {
                     if _move.promotion() {
                         _move.set_promotion_type(self.promotion_type);
@@ -120,6 +75,42 @@ impl eframe::App for App {
 }
 
 impl App {
+    fn control_panel(&mut self, ui: &mut egui::Ui) {
+        ui.vertical(|ui| {
+            ui.heading("Test chess");
+            ui.label(format!("Current player: {}", {
+                if self.game.current_player() == Color::White {
+                    "White"
+                } else {
+                    "Black"
+                }
+            }));
+            ui.label(format!(
+                "Is checked: {:?}",
+                self.game.history().last_move().map(|_move| _move.check())
+            ));
+            if ui.button("Undo last move").clicked() && self.game.undo_last_move().is_ok() {
+                self.end_state = None;
+                self.chosen_figure = None;
+                self.moves = None;
+            }
+            if let Some(end_state) = self.end_state {
+                ui.label("Game finished!");
+                ui.label(format!("Result: {:?}", end_state));
+                if ui.button("Restart?").clicked() {
+                    self.game = Game::default();
+                    self.end_state = None;
+                    self.chosen_figure = None;
+                    self.moves = None;
+                };
+            }
+            ui.radio_value(&mut self.promotion_type, PieceType::Queen, "Queen");
+            ui.radio_value(&mut self.promotion_type, PieceType::Rook, "Rook");
+            ui.radio_value(&mut self.promotion_type, PieceType::Bishop, "Bishop");
+            ui.radio_value(&mut self.promotion_type, PieceType::Knight, "Third");
+        });
+    }
+
     fn grid(&mut self, ui: &mut egui::Ui) -> Option<Move> {
         let board = self.game.board();
         let mut move_to_exec = None;

@@ -1510,12 +1510,10 @@ impl Game {
                                     | PieceFlag::Moved as u8,
                                 last_move.end_position(),
                             ),
-                            MoveType::Castling(_, rook) => {
-                                Piece::from_code(
-                                    rook.code | PieceFlag::Moved as u8,
-                                    last_move.castling_rook_position(),
-                                )
-                            }
+                            MoveType::Castling(_, rook) => Piece::from_code(
+                                rook.code | PieceFlag::Moved as u8,
+                                last_move.castling_rook_position(),
+                            ),
                             _ => Piece::from_code(
                                 last_move.piece.code | PieceFlag::Moved as u8,
                                 last_move.end_position(),

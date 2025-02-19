@@ -1,12 +1,8 @@
 use std::cmp::min;
 
-use crate::core::definitions::GameState;
 use crate::core::engine::{Board, Color, Move, Piece, PieceFlag, PieceType};
 use crate::core::utils::{compact_pos, unpack_pos};
-use crate::{Cell, DefaultExternalMove, Figure, MatchInterface};
-
-use rand::seq::IteratorRandom;
-
+use crate::{Cell, Figure};
 
 pub fn ui_board(board: &Board) -> Vec<Vec<Cell>> {
     (0..8)
