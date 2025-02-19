@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use std::fmt::{write, Display};
+use std::fmt::Display;
 use std::{fmt::Debug, iter::zip};
 
 use serde::{Deserialize, Serialize};
@@ -22,17 +22,17 @@ pub enum CastlingSide {
 pub enum MoveType {
     /** who is moving, where it's moving */
     QuietMove(u8),
-    /** who is capturing, whom is beeing captured */
+    /** who is capturing, whom is being captured */
     Capture(Piece),
     /** king, which side */
     Castling(CastlingSide, Piece),
     /** who is promoting, where it goes, to whom we are promoting */
     PromotionQuiet(u8, PieceType),
-    /** who is promoting, whom is beeing captured, to whom we are promoting */
+    /** who is promoting, whom is being captured, to whom we are promoting */
     PromotionCapture(Piece, PieceType),
     /** who is moving, where it's moving */
     PawnDoublePush(u8),
-    /** who is capturing, whom is beeing captured, where to move */
+    /** who is capturing, whom is being captured, where to move */
     EnPassantCapture(Piece, u8),
 }
 
@@ -92,6 +92,19 @@ impl Move {
             MoveType::PromotionCapture(piece, _) => piece.position() as u8,
             MoveType::PawnDoublePush(pos) => *pos,
             MoveType::EnPassantCapture(_, pos) => *pos,
+        }
+    }
+
+    fn castling_rook_position(&self) -> u8 {
+        match &self.move_type {
+            MoveType::Castling(side, _) => {
+                let rank = self.piece.position & 0xf0;
+                match side {
+                    CastlingSide::KingSide => rank | 0x05,
+                    CastlingSide::QueenSide => rank | 0x03,
+                }
+            }
+            _ => unreachable!("Error in code logic! Non-castling move asked for rook pos!"),
         }
     }
 
@@ -174,6 +187,7 @@ impl Board {
         &self.arr
     }
 
+    #[inline]
     pub fn get(&self, rank: u8, file: u8) -> Piece {
         let position = compact_pos(rank, file);
         Piece::from_code(self.arr[position as usize], position)
@@ -374,11 +388,7 @@ impl Board {
         }
     }
 
-    fn count_pinned_pieces(
-        &self,
-        target_king: Piece,
-        enpassant_pawn: Option<u8>,
-    ) -> Vec<(Piece, Piece)> {
+    fn count_pinned_pieces(&self, target_king: Piece) -> Vec<(Piece, Piece)> {
         let pinned_pieces: Vec<_> = self
             .iter_pieces()
             .filter(|attacker| {
@@ -400,18 +410,12 @@ impl Board {
             })
             .filter_map(|attacker| {
                 let mut pinned_piece = None;
-                // TODO: Remove?
-                let mut possible_enpassant = false;
                 for pos in between(attacker.position, target_king.position) {
                     let code = self.arr[pos as usize];
                     if code != 0x00 {
                         if pinned_piece.is_none() {
                             let piece = Piece::from_code(code, pos);
-                            possible_enpassant = piece.type_() == PieceType::Pawn
-                                && enpassant_pawn
-                                    .map_or(false, |pawn| is_in_straight_line(pos, pawn));
                             pinned_piece = Some(piece);
-                        // } else if possible_enpassant && matches!(PieceType::from_byte(code), PieceType::Pawn) && is_in_straight_line(enpassant_pawn.unwrap(), pos) {
                         } else {
                             pinned_piece = None;
                             break;
@@ -432,52 +436,6 @@ impl Board {
                     && piece.can_attack(position, self.arr)
             })
             .is_some()
-    }
-
-    pub fn is_checked(&self, color: Color) -> Option<(bool, Piece)> {
-        self.iter_pieces()
-            .find(|piece| piece.color() == color && matches!(piece.type_(), PieceType::King))
-            .map(|piece| (self.is_attacked(piece.position, color.opposite()), piece))
-    }
-
-    pub fn castling_right_check(&self, king: Piece) -> (bool, bool) {
-        if PieceFlag::Moved.is_set(king.code) {
-            return (false, false);
-        }
-        let rank = king.position & 0xf0;
-        (
-            {
-                // KingSide
-                let mut flag = true;
-                for file in [0x06, 0x05] {
-                    let pos = rank | file;
-                    let code = self.arr[pos as usize];
-                    if code != 0 || self.is_attacked(pos, king.color()) {
-                        flag = false;
-                        break;
-                    }
-                }
-                flag
-            },
-            {
-                // QueenSide
-                let mut flag = true;
-                for file in [0x03, 0x02] {
-                    let pos = rank | file;
-                    let code = self.arr[pos as usize];
-                    if code != 0 || self.is_attacked(pos, king.color()) {
-                        flag = false;
-                        break;
-                    }
-                }
-                flag
-            },
-        )
-    }
-
-    pub fn castling_rights(&mut self, king: Piece) {
-        let cast_rights = self.castling_right_check(king.clone());
-        self.arr[king.position()] = PieceFlag::set_kings_rights(king.code, cast_rights);
     }
 
     pub fn obstruct_board(&self, player: Color) -> Vec<Vec<bool>> {
@@ -846,7 +804,7 @@ pub struct Game {
 pub enum GameEndState {
     CheckMate,
     DrawStalemate,
-    DrawTreefoldRepetion,
+    DrawThreefoldRepetition,
     DrawFiftyMoveRule,
     DrawInsufficientMaterial,
 }
@@ -1078,7 +1036,7 @@ impl Game {
             )
         };
         let king_in_check = self.history.last_move().map(|_move| _move.check);
-        let pinned_pieces = self.board.count_pinned_pieces(king, None);
+        let pinned_pieces = self.board.count_pinned_pieces(king);
 
         for piece in self
             .board
@@ -1089,10 +1047,10 @@ impl Game {
                 .iter()
                 .find(|(pinned_piece, _)| *pinned_piece == piece)
             {
-                let possible_possitions: Vec<_> = between(attacker.position, king.position)
+                let possible_positions: Vec<_> = between(attacker.position, king.position)
                     .filter(|pos| self.board.arr[*pos as usize] == 0x00)
                     .collect();
-                (Some(attacker), Some(possible_possitions))
+                (Some(attacker), Some(possible_positions))
             } else {
                 (None, None)
             };
@@ -1170,50 +1128,43 @@ impl Game {
                     }
                     // enpassant
                     if let Some(pawn_pos) = &enpassant_pawn {
-                        if pawn_pos.abs_diff(piece.position) == 0x01
-                            && attacker.map_or(true, |attacker| attacker.position == *pawn_pos)
+                        if pawn_pos.abs_diff(piece.position) != 0x01
+                            || attacker.map_or(false, |attacker| attacker.position != *pawn_pos)
                         {
-                            let step: u8 = match piece.color() {
-                                Color::Black => 0xf0,
-                                Color::White => 0x10,
-                            };
-                            let enpassant = Move {
-                                piece,
-                                move_type: MoveType::EnPassantCapture(
-                                    Piece::from_code(self.board.arr[*pawn_pos as usize], *pawn_pos),
-                                    pawn_pos.wrapping_add(step),
-                                ),
-                                check: CheckType::None,
-                            };
-                            let mut temp_board = self.board.clone();
-                            temp_board.execute(enpassant.clone());
-                            if !temp_board
-                                .is_attacked(king.position, self.current_player.opposite())
-                            {
-                                // temp_board.arr[pawn_pos.wrapping_add(step) as usize] = 0xff;
-                                possible_moves.push(Move {
-                                    check: if enemy_king.map_or(false, |enemy_king| {
-                                        temp_board.who_can_attack(enemy_king).map_or(
-                                            false,
-                                            |attackers| {
-                                                attackers
-                                                    .into_iter()
-                                                    .find(|attacker| {
-                                                        attacker.position
-                                                            != enpassant.end_position()
-                                                    })
-                                                    .is_some()
-                                            },
-                                        )
-                                    }) {
-                                        CheckType::Discovered
-                                    } else {
-                                        CheckType::None
-                                    },
-                                    ..enpassant
-                                });
-                            }
+                            continue;
                         }
+                        let enpassant = Move {
+                            piece,
+                            move_type: MoveType::EnPassantCapture(
+                                Piece::from_code(self.board.arr[*pawn_pos as usize], *pawn_pos),
+                                pawn_pos.wrapping_add(step),
+                            ),
+                            check: CheckType::None,
+                        };
+                        let mut temp_board = self.board.clone();
+                        temp_board.execute(enpassant.clone());
+                        if temp_board.is_attacked(king.position, self.current_player.opposite()) {
+                            continue;
+                        }
+                        let (direct, discovered) = enemy_king
+                            .and_then(|enemy_king| {
+                                temp_board.who_can_attack(enemy_king).map(|attackers| {
+                                    let (mut direct, mut discovered) = (false, false);
+                                    for attacker in attackers.into_iter() {
+                                        if attacker.position == enpassant.end_position() {
+                                            direct = true;
+                                        } else {
+                                            discovered = true;
+                                        }
+                                    }
+                                    (direct, discovered)
+                                })
+                            })
+                            .unwrap_or((false, false));
+                        possible_moves.push(Move {
+                            check: CheckType::from_bools(direct, discovered),
+                            ..enpassant
+                        });
                     }
                 }
                 PieceType::Knight => {
@@ -1323,7 +1274,7 @@ impl Game {
                             if cell == 0x00
                                 && possible_positions
                                     .as_ref()
-                                    .map_or(true, |possitions| possitions.contains(&pos))
+                                    .map_or(true, |positions| positions.contains(&pos))
                             {
                                 possible_moves.push(Move {
                                     piece,
@@ -1351,16 +1302,10 @@ impl Game {
             king_in_check,
             Some(CheckType::Direct) | Some(CheckType::Discovered)
         ) {
-            // let attack_pieces = self
-            //     .board
-            //     .who_can_attack(king)
-            //     .expect("Incorrect check: attacker is not found");
-            let attack_pieces = if let Some(pieces) = self.board.who_can_attack(king) {
-                pieces
-            } else {
-                println!("debug");
-                panic!("Incorrect check: attacker is not found");
-            };
+            let attack_pieces = self
+                .board
+                .who_can_attack(king)
+                .expect("Incorrect check: attacker is not found");
             assert!(
                 attack_pieces.len() == 1,
                 "There can be only one piece to attack the king"
@@ -1380,8 +1325,8 @@ impl Game {
                     _ if _move.piece().type_() == PieceType::King => true,
                     MoveType::EnPassantCapture(pawn, _) if pawn == &attacker => true,
                     _ => {
-                        possible_positions.contains(&_move.end_position())
-                            || _move.end_position() == attacker.position
+                        _move.end_position() == attacker.position
+                            || possible_positions.contains(&_move.end_position())
                     }
                 })
                 .collect();
@@ -1417,8 +1362,11 @@ impl Game {
         // Find discovery checks and direct checks
         // This can be not executed on dark chess client
         if let Some(enemy_king) = enemy_king {
-            let pinned_pieces = self.board.count_pinned_pieces(enemy_king, enpassant_pawn);
+            let pinned_pieces = self.board.count_pinned_pieces(enemy_king);
             for _move in possible_moves.iter_mut() {
+                if matches!(_move.move_type(), MoveType::EnPassantCapture(..)) {
+                    continue;
+                }
                 let direct_check = match _move.move_type {
                     MoveType::PromotionQuiet(_, new_type)
                     | MoveType::PromotionCapture(_, new_type) => {
@@ -1430,26 +1378,21 @@ impl Game {
                             )
                             .can_attack(enemy_king.position, self.board.arr)
                     }
-                    MoveType::Castling(side, rook) => {
-                        let step = match side {
-                            CastlingSide::KingSide => 0xff,
-                            CastlingSide::QueenSide => 0x01,
-                        };
-                        Piece::from_code(rook.code, _move.end_position().wrapping_add(step))
+                    MoveType::Castling(_, rook) => {
+                        Piece::from_code(rook.code, _move.castling_rook_position())
                             .can_attack(enemy_king.position, self.board.arr)
                     }
                     _ => Piece::from_code(_move.piece().code, _move.end_position())
                         .can_attack(enemy_king.position, self.board.arr),
                 };
-                let discovered_check = matches!(_move.check(), CheckType::Discovered)
-                    || pinned_pieces
-                        .iter()
-                        .find(|(piece, _)| piece == _move.piece())
-                        .map_or(false, |(_, attacker)| {
-                            between(enemy_king.position, attacker.position)
-                                .find(|pos| *pos == _move.end_position())
-                                .is_none()
-                        });
+                let discovered_check = pinned_pieces
+                    .iter()
+                    .find(|(piece, _)| piece == _move.piece())
+                    .map_or(false, |(_, attacker)| {
+                        between(enemy_king.position, attacker.position)
+                            .find(|pos| *pos == _move.end_position())
+                            .is_none()
+                    });
                 _move.check = CheckType::from_bools(direct_check, discovered_check);
             }
         }
@@ -1499,7 +1442,7 @@ impl Game {
         match _move.move_type() {
             MoveType::QuietMove(_) => {
                 if self.existed_positions.count(&compressed_board) >= 2 {
-                    return Some(GameEndState::DrawTreefoldRepetion);
+                    return Some(GameEndState::DrawThreefoldRepetition);
                 }
             }
             _ => self.existed_positions.clear(),
@@ -1539,6 +1482,7 @@ impl Game {
         Ok(())
     }
 
+    #[cfg(debug_assertions)]
     fn current_check_state(&self) -> CheckType {
         let king =
             if let Some(king) = self.board.iter_pieces().find(|piece| {
@@ -1566,14 +1510,10 @@ impl Game {
                                     | PieceFlag::Moved as u8,
                                 last_move.end_position(),
                             ),
-                            MoveType::Castling(side, rook) => {
-                                let step = match side {
-                                    CastlingSide::KingSide => 0xff,
-                                    CastlingSide::QueenSide => 0x01,
-                                };
+                            MoveType::Castling(_, rook) => {
                                 Piece::from_code(
                                     rook.code | PieceFlag::Moved as u8,
-                                    last_move.end_position().wrapping_add(step),
+                                    last_move.castling_rook_position(),
                                 )
                             }
                             _ => Piece::from_code(
@@ -1589,7 +1529,7 @@ impl Game {
                     }
                 }
                 2 => CheckType::Double,
-                _ => unreachable!("Should not be possiable in legal chess game"),
+                _ => unreachable!("Should not be possible in legal chess game"),
             },
             None => CheckType::None,
         }
@@ -1698,7 +1638,7 @@ impl Piece {
 
     fn can_attack(&self, target: u8, board: [u8; 128]) -> bool {
         // precomputed tables should increase speed of this dramatically
-        // No pieces can attact itself
+        // No pieces can attack itself
         if self.position == target {
             return false;
         }
