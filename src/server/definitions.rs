@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::{core::engine::Board, Color, DefaultExternalMove, Game};
+use crate::{core::engine::Board, Color, DefaultExternalMove};
 use postcard::{from_bytes, to_allocvec};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::UnboundedSender;

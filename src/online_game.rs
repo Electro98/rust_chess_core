@@ -6,7 +6,7 @@ use url::Url;
 use crate::{
     core::engine::Board,
     server::definitions::{ClientMessage, ServerMessage},
-    Color, DarkGame,
+    Color,
 };
 
 pub type BackgroundThread = std::thread::JoinHandle<()>;
