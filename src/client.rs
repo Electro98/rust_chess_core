@@ -1,4 +1,8 @@
-use std::{str::FromStr, sync::mpsc::{Receiver, Sender}, thread::JoinHandle};
+use std::{
+    str::FromStr,
+    sync::mpsc::{Receiver, Sender},
+    thread::JoinHandle,
+};
 
 use eframe::egui;
 use futures::StreamExt;
@@ -7,7 +11,6 @@ use tokio_stream::wrappers::UnboundedReceiverStream;
 use tungstenite::{Error, Message};
 use url::Url;
 
-
 struct App {
     message: String,
     display: String,
@@ -15,29 +18,34 @@ struct App {
     output: Receiver<String>,
 }
 
-async fn connect(url: Url, input: UnboundedReceiver<String>, output: Sender<String>) -> Result<(), Error> {
+async fn connect(
+    url: Url,
+    input: UnboundedReceiver<String>,
+    output: Sender<String>,
+) -> Result<(), Error> {
     let (websocket, _) = tokio_tungstenite::connect_async(url).await?;
     let (write, read) = websocket.split();
     let input = UnboundedReceiverStream::new(input);
-    tokio::task::spawn(input.map(|msg| {
-        Ok(Message::text(msg))
-    }).forward(write));
+    tokio::task::spawn(input.map(|msg| Ok(Message::text(msg))).forward(write));
 
-    Ok(read.for_each(|msg| async {
-        let data = msg.unwrap();
-        if data.is_text() {
-            let _ = output.send(data.into_text().unwrap());
-        }
-    }).await)
+    Ok(read
+        .for_each(|msg| async {
+            let data = msg.unwrap();
+            if data.is_text() {
+                let _ = output.send(data.into_text().unwrap());
+            }
+        })
+        .await)
 }
 
 fn start_client_thread(url: Url) -> (UnboundedSender<String>, Receiver<String>, JoinHandle<()>) {
     let (client_input_tx, client_input_rx) = mpsc::unbounded_channel();
     let (client_output_tx, client_output_rx) = std::sync::mpsc::channel();
     let handle = std::thread::spawn(move || {
-        tokio::runtime::Runtime::new().unwrap().block_on(
-            connect(url, client_input_rx, client_output_tx)
-        ).expect("Failed to connect!");
+        tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(connect(url, client_input_rx, client_output_tx))
+            .expect("Failed to connect!");
     });
     (client_input_tx, client_output_rx, handle)
 }
@@ -45,7 +53,8 @@ fn start_client_thread(url: Url) -> (UnboundedSender<String>, Receiver<String>, 
 fn main() -> Result<(), eframe::Error> {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
 
-    let url = Url::from_str(&std::env::args().nth(1).expect("Choose link")).expect("Failed to parse link");
+    let url = Url::from_str(&std::env::args().nth(1).expect("Choose link"))
+        .expect("Failed to parse link");
     let (input, output, handle) = start_client_thread(url);
 
     let options = eframe::NativeOptions {
