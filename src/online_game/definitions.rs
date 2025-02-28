@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::{core::engine::Board, Color, DefaultExternalMove};
+use crate::{
+    core::engine::{Board, Game, GameEndState, Move},
+    Color,
+};
 use postcard::{from_bytes, to_allocvec};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::UnboundedSender;
@@ -11,7 +14,7 @@ use warp::filters::ws::Message;
 pub use uuid::Uuid;
 
 #[allow(unused_imports)]
-pub use log::{debug as debg, error as err, info as inf, trace as trc, warn as wrn};
+pub use log::{debug, error, info, trace, warn};
 
 pub type GameId = String;
 
@@ -19,11 +22,13 @@ pub struct Client {
     pub id: Uuid,
     pub sender: UnboundedSender<Result<Message, warp::Error>>,
     pub game_id: GameId,
+    pub color: Color,
 }
 
 pub struct OnlineGame {
     pub id: GameId,
     pub game: Game,
+    pub sender: UnboundedSender<(Color, ClientMessage)>,
     pub white: Option<Client>,
     pub black: Option<Client>,
 }
@@ -33,16 +38,20 @@ pub type Rooms = Arc<RwLock<HashMap<GameId, OnlineGame>>>;
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ServerMessage {
     OpponentConnected,
-    OpponentDisconected,
+    OpponentDisconnected,
     GameCanceled,
-    GameFinished(Color),
-    GameStateSync(Board, Color, Color, bool),
+    GameFinished(GameEndState),
+    /// Board, LastMove, CurrentPlayer, YourColor
+    GameStateSync(Board, Option<Move>, Color, Color),
     RoomId(String),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ClientMessage {
-    MakeMove(DefaultExternalMove),
+    Connected,
+    Disconnect,
+    MakeMove(Move),
+    Resigned,
 }
 
 impl OnlineGame {

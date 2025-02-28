@@ -18,7 +18,7 @@ pub enum CastlingSide {
     QueenSide = 0x00,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum MoveType {
     /** who is moving, where it's moving */
     QuietMove(u8),
@@ -800,13 +800,14 @@ pub struct Game {
     history: GameHistory,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum GameEndState {
     CheckMate,
     DrawStalemate,
     DrawThreefoldRepetition,
     DrawFiftyMoveRule,
     DrawInsufficientMaterial,
+    Resignation(Color),
 }
 
 fn flag_piece_moved(piece: PieceType, color: Color, pos: u8) -> u8 {
@@ -834,8 +835,7 @@ fn flag_piece_moved(piece: PieceType, color: Color, pos: u8) -> u8 {
 }
 
 impl Game {
-    #[cfg(debug_assertions)]
-    pub fn new_debug(board: Board, current_player: Color, last_move: Option<Move>) -> Game {
+    pub fn new(board: Board, current_player: Color, last_move: Option<Move>) -> Game {
         Game {
             board,
             current_player,
