@@ -1,12 +1,16 @@
-use warp::Filter;
+use chess_engine::online_game::{
+    definitions::Rooms,
+    handlers::{existing_room_handler, new_room_handler},
+};
 
-use chess_engine::server::definitions::*;
-use chess_engine::server::handlers::*;
+#[allow(unused_imports)]
+use log::{debug, error, info, trace, warn};
+use warp::Filter;
 
 #[tokio::main]
 async fn main() {
     env_logger::init();
-    inf!("It's server!");
+    info!("It's server!");
 
     let rooms: Rooms = Default::default();
 

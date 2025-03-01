@@ -1,9 +1,10 @@
 use warp::{reject::Rejection, reply::Reply};
 
-use crate::server::definitions::*;
-use crate::server::logic::client_connection;
+use crate::online_game::definitions::*;
+use crate::online_game::logic::client_connection;
 
 pub async fn new_room_handler(ws: warp::ws::Ws, rooms: Rooms) -> Result<impl Reply, Rejection> {
+    info!("Get new connection to websocket!");
     Ok(ws.on_upgrade(|ws| client_connection(ws, rooms, None)))
 }
 
@@ -12,8 +13,7 @@ pub async fn existing_room_handler(
     ws: warp::ws::Ws,
     rooms: Rooms,
 ) -> Result<impl Reply, Rejection> {
-    let rooms_disp = rooms.clone();
-    let result = if let Some(game) = rooms_disp.read().await.get(&room) {
+    let result = if let Some(game) = rooms.clone().read().await.get(&room) {
         // Trying to connect in already created game
         if game.black.is_some() && game.white.is_some() {
             // Room is full

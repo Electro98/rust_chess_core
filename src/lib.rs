@@ -1,12 +1,11 @@
 pub mod core;
+// pub mod online_game;
 pub mod online_game;
-pub mod server;
 pub mod utils;
 
 // module re-exports
 pub use core::definitions::{Cell, DefaultExternalMove, Figure, GameState, MatchInterface};
 pub use core::engine::{Color, PieceType};
-pub use core::game::{DarkGame, Game};
 
 #[cfg(test)]
 mod tests;
