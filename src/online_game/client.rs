@@ -1,6 +1,9 @@
-use std::sync::{
-    mpsc::{Receiver, Sender},
-    Arc,
+use std::{
+    sync::{
+        mpsc::{Receiver, Sender},
+        Arc,
+    },
+    thread::JoinHandle,
 };
 
 use futures::{future, SinkExt, StreamExt};
@@ -70,7 +73,8 @@ async fn handle_server_message(
     message: ServerMessage,
 ) -> Result<Option<OnlineClientOutput>, ()> {
     // TODO: is it okay to do so?
-    match *data.state.lock().await {
+    let state = { *data.state.lock().await };
+    match state {
         ClientState::Unconnected => match message {
             ServerMessage::GameStateSync(board, last_move, current_player, client_color) => {
                 *data.game.lock().await = Some(Game::new(board, current_player, last_move));
@@ -127,7 +131,7 @@ async fn handle_server_message(
                 *data.state.lock().await = ClientState::WaitingOpponent;
                 Ok(Some(ClientState::WaitingOpponent.into()))
             }
-            ServerMessage::GameStateSync(board, last_move, current_player, client_color) => {
+            ServerMessage::GameStateSync(board, last_move, current_player, _) => {
                 *data.game.lock().await = Some(Game::new(board, current_player, last_move));
                 *data.state.lock().await = ClientState::GameMyTurn;
                 Ok(Some(ClientState::GameMyTurn.into()))
@@ -150,6 +154,7 @@ async fn handle_client_input(
     data: &OnlineClientData,
     input: OnlineClientInput,
 ) -> Result<(Option<OnlineClientOutput>, Option<ClientMessage>), ()> {
+    let state = { *data.state.lock().await };
     match input {
         OnlineClientInput::Disconnect => {
             let mut lock = data.state.lock().await;
@@ -163,7 +168,7 @@ async fn handle_client_input(
                 Ok((Some(OnlineClientOutput::IncorrectInput), None))
             }
         }
-        OnlineClientInput::Move(client_move) => match *data.state.lock().await {
+        OnlineClientInput::Move(client_move) => match state {
             ClientState::GameMyTurn => {
                 *data.state.lock().await = ClientState::GameTurnValidation;
                 Ok((
@@ -173,7 +178,7 @@ async fn handle_client_input(
             }
             _ => Err(()),
         },
-        OnlineClientInput::Resign => match *data.state.lock().await {
+        OnlineClientInput::Resign => match state {
             ClientState::GameMyTurn | ClientState::GameEnemyTurn => {
                 *data.state.lock().await = ClientState::GameTurnValidation;
                 Ok((

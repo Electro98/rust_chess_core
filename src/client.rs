@@ -43,13 +43,16 @@ fn main() -> Result<(), eframe::Error> {
     let online_client = OnlineClient::start_client(url);
 
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([480.0, 320.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([572.0, 392.0]),
         ..Default::default()
     };
     let result = eframe::run_native(
         "Web Client",
         options,
         Box::new(|cc| {
+            // This gives us image support:
+            egui_extras::install_image_loaders(&cc.egui_ctx);
+
             Box::new(App {
                 client: online_client,
                 last_state: ClientState::Unconnected,
@@ -91,11 +94,16 @@ impl eframe::App for App {
                             }
                             println!(" - move: {_move} {_move:?}");
                             // self.end_state = game.execute(_move);
+                            self.client.make_move(_move);
                         }
                     });
                 }
             }
         });
+    }
+
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        self.client.disconnect();
     }
 }
 
@@ -108,6 +116,9 @@ impl App {
             }
             OnlineClientOutput::StateChanged(client_state) => {
                 debug!("Switched to new state! State: {:?}", client_state);
+                if matches!(client_state, ClientState::GameFinished) {
+                    // TODO: asd
+                }
             }
             OnlineClientOutput::IncorrectInput => {
                 error!("Incorrect user action!");
@@ -118,6 +129,13 @@ impl App {
     fn control_panel(&mut self, ui: &mut egui::Ui, game: &Game) {
         ui.vertical(|ui| {
             ui.heading("Test chess");
+            ui.label(format!("You are: {}", {
+                if self.client.player_color() == Color::White {
+                    "White"
+                } else {
+                    "Black"
+                }
+            }));
             ui.label(format!("Current player: {}", {
                 if game.current_player() == Color::White {
                     "White"
@@ -213,6 +231,10 @@ impl App {
                                         None
                                     }
                                 }
+                            } else if piece.color() != self.client.player_color() {
+                                self.chosen_figure = None;
+                                self.selected_cell = None;
+                                None
                             } else {
                                 match piece.type_() {
                                     PieceType::Invalid | PieceType::EmptySquare => None,

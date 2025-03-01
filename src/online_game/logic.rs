@@ -66,14 +66,15 @@ pub async fn client_connection(ws: WebSocket, rooms: Rooms, room_name: Option<St
         }
     };
 
-    // if let Err(err) = sender.send((player, ClientMessage::Connected)) {
-    //     error!("Failed to send msg to game handler! Is game ended?");
-    //     debug!("Client id: {}", id);
-    //     debug!("Game id: {}", game_id);
-    //     error!("Got error: {}", err);
-    // }
     client_ws_receiver
         .for_each(|msg| async {
+            if msg.as_ref().map_or(false, |msg| msg.is_close()) {
+                trace!("Room #{} {} client closed connection!", game_id, player);
+                return;
+            } else if msg.as_ref().map_or(false, |msg| !msg.is_binary()) {
+                info!("Room #{} received non-binary message {:?}", game_id, msg);
+                return;
+            }
             let client_msg = msg.unwrap().try_into();
             match client_msg {
                 Ok(msg) => sender.send((player, msg)).expect("Something got wrong"),
@@ -82,6 +83,8 @@ pub async fn client_connection(ws: WebSocket, rooms: Rooms, room_name: Option<St
         })
         .await;
 
+    // Often is a duplicate. but if something got really wrong with client
+    //  better be safe than sorry
     let _ = sender.send((player, ClientMessage::Disconnect));
     trace!("Client {} was disconnected...", id);
 }
@@ -100,6 +103,7 @@ async fn game_handler(
     rooms: Rooms,
     game_id: GameId,
 ) {
+    debug!("Game #{} Started game handler", game_id);
     let mut current_state = ServerState::NotStarted;
     let mut game = Game::default();
     // TODO: Game logic!
@@ -152,6 +156,21 @@ async fn game_handler(
             }
             ClientMessage::Disconnect => match &current_state {
                 ServerState::UnconnectedPlayer => {
+                    if rooms
+                        .read()
+                        .await
+                        .get(&game_id)
+                        .unwrap()
+                        .get_player(player)
+                        .is_none()
+                    {
+                        trace!(
+                            "Game #{} Received {} player duplicate disconnect message!",
+                            game_id,
+                            player
+                        );
+                        continue;
+                    }
                     current_state = ServerState::GameCanceled;
                     trace!(
                         "Game #{} last {} player is disconnected! Room is closed!",
@@ -163,13 +182,13 @@ async fn game_handler(
                 ServerState::ActiveGame => {
                     current_state = ServerState::UnconnectedPlayer;
                     trace!("Game #{} {} player is disconnected!", game_id, player);
-                    send_message_by_id(
-                        &rooms,
-                        &game_id,
-                        player.opposite(),
+                    let mut rooms = rooms.write().await;
+                    let room = rooms.get_mut(&game_id).unwrap();
+                    *room.get_player_mut(player) = None;
+                    send_message(
+                        room.get_player(player.opposite()).unwrap(),
                         ServerMessage::OpponentDisconnected,
-                    )
-                    .await;
+                    );
                 }
                 ServerState::GameCanceled | ServerState::GameFinished => {
                     trace!("Game #{} {} player is disconnected!", game_id, player);
@@ -206,10 +225,8 @@ async fn game_handler(
                 }
                 let moves = game.get_possible_moves(true);
                 let same_move = moves.into_iter().find(|_move| {
-                    _move.end_position() == client_move.end_position()
-                        && _move.piece().type_() == client_move.piece().type_()
-                        && (!client_move.promotion()
-                            || client_move.move_type() == _move.move_type())
+                    _move.piece() == client_move.piece()
+                        && _move.move_type() == client_move.move_type()
                 });
                 let end_state = if let Some(_move) = same_move {
                     game.execute(_move)
@@ -248,6 +265,7 @@ async fn game_handler(
                         ),
                     );
                     if let Some(end_state) = end_state {
+                        current_state = ServerState::GameFinished;
                         broadcast_msg(room, ServerMessage::GameFinished(end_state));
                     }
                 }
@@ -255,6 +273,7 @@ async fn game_handler(
             ClientMessage::Resigned => todo!(),
         }
     }
+    debug!("Game #{} Finished game handler!", game_id);
     {
         let mut rooms = rooms.write().await;
         if let Some(online_game) = rooms.get_mut(&game_id) {
