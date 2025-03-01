@@ -69,16 +69,22 @@ pub async fn client_connection(ws: WebSocket, rooms: Rooms, room_name: Option<St
     client_ws_receiver
         .for_each(|msg| async {
             if msg.as_ref().map_or(false, |msg| msg.is_close()) {
-                trace!("Room #{} {} client closed connection!", game_id, player);
+                trace!("Room #{} client {} closed connection!", game_id, id);
                 return;
             } else if msg.as_ref().map_or(false, |msg| !msg.is_binary()) {
-                info!("Room #{} received non-binary message {:?}", game_id, msg);
+                info!(
+                    "Room #{} client {} received non-binary message {:?}",
+                    game_id, id, msg
+                );
                 return;
             }
             let client_msg = msg.unwrap().try_into();
             match client_msg {
                 Ok(msg) => sender.send((player, msg)).expect("Something got wrong"),
-                Err(err) => error!("Failed to parse client message! Err: {:?}", err),
+                Err(err) => error!(
+                    "Room #{} client {} failed to parse message! Err: {:?}",
+                    game_id, id, err
+                ),
             }
         })
         .await;

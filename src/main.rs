@@ -34,11 +34,11 @@ fn main() -> Result<(), eframe::Error> {
             // This gives us image support:
             egui_extras::install_image_loaders(&cc.egui_ctx);
 
-            let game = Game::from_fen(
-                "r2k3r/p1p1qpb1/bn2pnp1/4N3/1p2P3/2N1BQ1p/PPP1BPPP/R3K2R w KQ - 0 1",
-            )
-            .unwrap();
-            dbg!(&game);
+            // let game = Game::from_fen(
+            //     "r2k3r/p1p1qpb1/bn2pnp1/4N3/1p2P3/2N1BQ1p/PPP1BPPP/R3K2R w KQ - 0 1",
+            // )
+            // .unwrap();
+            let game = Default::default();
             Box::new(App {
                 cell_size: 45.0,
                 game,
@@ -64,10 +64,6 @@ impl eframe::App for App {
                     }
                     println!(" - move: {_move} {_move:?}");
                     self.end_state = self.game.execute(_move);
-                    // if self.game.history().last_move().unwrap().check() != CheckType::None {
-                    //     dbg!(self.game.board())
-                    // }
-                    // self.game.wait_move();
                 }
             });
         });
