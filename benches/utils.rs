@@ -2,7 +2,7 @@ use chess_engine::{
     core::engine::{Board, Game, Piece},
     core::utils::compact_pos,
     utils::perf_test,
-    GameState, PieceType,
+    PieceType,
 };
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
