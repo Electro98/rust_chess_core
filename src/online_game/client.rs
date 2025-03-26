@@ -1,9 +1,6 @@
-use std::{
-    sync::{
-        mpsc::{Receiver, Sender},
-        Arc,
-    },
-    thread::JoinHandle,
+use std::sync::{
+    mpsc::{Receiver, Sender},
+    Arc,
 };
 
 use futures::{future, SinkExt, StreamExt};

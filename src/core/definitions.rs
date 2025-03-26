@@ -1,6 +1,4 @@
-use serde::{Deserialize, Serialize};
-
-use crate::core::engine::{Color, Move as BaseMove, PieceType};
+use crate::core::engine::{Color, PieceType};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Figure {
@@ -21,44 +19,4 @@ pub enum Cell {
 pub trait ImplicitMove {
     fn promotion(&self) -> bool;
     fn set_promotion_type(&mut self, kind: PieceType);
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct ExternalMove<T: ImplicitMove + Serialize> {
-    pub from: (u32, u32),
-    pub to: (u32, u32),
-    pub _move: T,
-}
-
-pub type DefaultExternalMove = ExternalMove<BaseMove>;
-
-pub trait MatchInterface<T: ImplicitMove + for<'a> Deserialize<'a> + Serialize> {
-    fn current_board(&self) -> Vec<Vec<Cell>>;
-    fn cell(&self, rank: usize, file: usize) -> Option<Cell>;
-    fn possible_moves(&self, rank: usize, file: usize) -> Option<Vec<ExternalMove<T>>>;
-    fn execute_move(&mut self, _move: ExternalMove<T>) -> GameState;
-    fn wait_move(&mut self) -> GameState;
-    // info
-    fn current_player(&self) -> Color;
-    fn checked(&self) -> bool;
-    fn game_ended(&self) -> bool;
-}
-
-pub enum GameState {
-    PlayerMove(Color),
-    DistantMove(Color),
-    Finished,
-}
-
-// ---
-// Implementation block
-// ---
-
-impl<T: ImplicitMove + for<'a> Deserialize<'a> + Serialize> ExternalMove<T> {
-    pub fn is_promotion(&self) -> bool {
-        self._move.promotion()
-    }
-    pub fn set_promotion_type(&mut self, kind: PieceType) {
-        self._move.set_promotion_type(kind)
-    }
 }

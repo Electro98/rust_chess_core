@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::core::engine::{Board, Game, Move};
 
 // Only for server-side/offline match
