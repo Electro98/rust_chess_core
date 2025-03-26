@@ -4,7 +4,6 @@ pub mod online_game;
 pub mod utils;
 
 // module re-exports
-pub use core::definitions::{Cell, DefaultExternalMove, Figure, GameState, MatchInterface};
 pub use core::engine::{Color, PieceType};
 
 #[cfg(test)]

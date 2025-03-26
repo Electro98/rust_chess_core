@@ -1,10 +1,4 @@
-use crate::{
-    core::{
-        definitions::ImplicitMove,
-        engine::{Game, GameEndState},
-    },
-    Color,
-};
+use crate::{core::engine::Game, Color};
 use futures::{FutureExt, StreamExt};
 use tokio::sync::mpsc::{self, UnboundedReceiver};
 use tokio_stream::wrappers::UnboundedReceiverStream;
@@ -282,7 +276,7 @@ async fn game_handler(
     debug!("Game #{} Finished game handler!", game_id);
     {
         let mut rooms = rooms.write().await;
-        if let Some(online_game) = rooms.get_mut(&game_id) {
+        if let Some(_online_game) = rooms.get_mut(&game_id) {
             // TODO: How to properly delete room?
             rooms.remove(&game_id);
             trace!("Deleted room '{}' with finished game", game_id);

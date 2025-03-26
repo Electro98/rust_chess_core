@@ -1,4 +1,4 @@
-use chess_engine::{core::engine::Piece, Cell, Color, PieceType};
+use chess_engine::{core::definitions::Cell, core::engine::Piece, Color, PieceType};
 use eframe::egui;
 
 pub fn background_color(

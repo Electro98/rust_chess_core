@@ -1,8 +1,8 @@
 use std::cmp::min;
 
-use crate::core::engine::{Board, Color, Move, Piece, PieceFlag, PieceType};
-use crate::core::utils::{compact_pos, unpack_pos};
-use crate::{Cell, Figure};
+use crate::core::definitions::{Cell, Figure};
+use crate::core::engine::{Board, Color, Piece, PieceFlag, PieceType};
+use crate::core::utils::compact_pos;
 
 pub fn ui_board(board: &Board) -> Vec<Vec<Cell>> {
     (0..8)

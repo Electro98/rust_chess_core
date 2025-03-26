@@ -1,8 +1,8 @@
-use self::core::engine::{Board, CheckType, Game, GameEndState, Move, MoveType, Piece};
+use crate::core::definitions::{Cell, Figure};
+
+use self::core::engine::{Board, Game, GameEndState, Piece};
 use self::core::game::ui_board;
-use self::core::utils::{
-    between, compact_pos, distance, is_in_diagonal_line, is_in_straight_line, unpack_pos,
-};
+use self::core::utils::{between, compact_pos, is_in_diagonal_line, is_in_straight_line};
 use self::utils::perf_test;
 use rand::seq::IteratorRandom;
 
