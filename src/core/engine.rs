@@ -422,7 +422,7 @@ impl Board {
                         }
                     }
                 }
-                pinned_piece.map(|piece| (piece, attacker))
+                pinned_piece.zip(Some(attacker))
             })
             .collect();
         pinned_pieces
@@ -1628,6 +1628,10 @@ impl Piece {
 
     pub fn type_(&self) -> PieceType {
         PieceType::from_byte(self.code)
+    }
+
+    pub fn code(&self) -> u8 {
+        self.code
     }
 
     pub fn position(&self) -> usize {
