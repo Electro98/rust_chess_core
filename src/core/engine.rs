@@ -172,6 +172,13 @@ impl Board {
         }
     }
 
+    pub unsafe fn from_slice(slice: &[u8]) -> Board {
+        assert!(slice.len() >= 128, "Slice is too small for reading board from it!");
+        let mut board = Self::new();
+        board.arr.copy_from_slice(slice);
+        board
+    }
+
     #[cfg(debug_assertions)]
     pub fn new_debug(arr: &[u8; 64]) -> Board {
         let mut board = Self::new();
@@ -1760,7 +1767,7 @@ impl PieceType {
         unsafe { std::mem::transmute(byte & 0x07) }
     }
 
-    fn is_valid(&self) -> bool {
+    pub fn is_valid(&self) -> bool {
         matches!(
             self,
             Self::Pawn | Self::Knight | Self::Bishop | Self::Rook | Self::Queen | Self::King
