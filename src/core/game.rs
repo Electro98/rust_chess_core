@@ -6,9 +6,9 @@ use crate::core::utils::compact_pos;
 
 pub fn ui_board(board: &Board) -> Vec<Vec<Cell>> {
     (0..8)
-        .map(|rank| {
+        .map(|file| {
             (0..8)
-                .map(|file| compact_pos(rank, file))
+                .map(|rank| compact_pos(file, rank))
                 .map(|pos| (board.inside()[pos as usize], pos))
                 .map(|(code, position)| {
                     if PieceFlag::UnknownCellFlag.is_set(code) {
@@ -36,9 +36,9 @@ fn material_advantage(board: &Board, player: Color) -> i32 {
     let mut material_difference: i32 = 0;
     let mut material_total = 0;
     let mut pawn_advantage = 0;
-    for rank in 0..8u8 {
-        for file in 0..8u8 {
-            let pos = (rank << 4) + file;
+    for file in 0..8u8 {
+        for rank in 0..8u8 {
+            let pos = (file << 4) + rank;
             let piece = Piece::from_code(board.inside()[pos as usize], pos);
             let material = match piece.type_() {
                 PieceType::Pawn => 100,

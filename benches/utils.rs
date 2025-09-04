@@ -33,9 +33,9 @@ fn iter_for_raw_count(board: &Board) -> u64 {
 
 fn for_raw_count(board: &Board) -> u64 {
     let mut result = 0;
-    for file in 0..8u8 {
-        for rank in 0..8u8 {
-            let pos = compact_pos(rank, file);
+    for rank in 0..8u8 {
+        for file in 0..8u8 {
+            let pos = compact_pos(file, rank);
             result += code_to_value(board.inside()[pos as usize]);
         }
     }
@@ -64,9 +64,9 @@ fn iter_pieces(board: &Board) -> u64 {
 
 fn for_piece_count(board: &Board) -> u64 {
     let mut result = 0;
-    for file in 0..8u8 {
-        for rank in 0..8u8 {
-            let pos = compact_pos(rank, file);
+    for rank in 0..8u8 {
+        for file in 0..8u8 {
+            let pos = compact_pos(file, rank);
             result += type_to_value(Piece::from_code(board.inside()[pos as usize], pos).type_());
         }
     }
