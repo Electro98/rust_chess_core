@@ -116,9 +116,9 @@ impl App {
             .max_col_width(self.cell_size)
             .min_row_height(self.cell_size)
             .show(ui, |ui| {
-                for rank in (0..8).rev() {
-                    for file in 0..8 {
-                        let piece = board.get(rank, file);
+                for file in (0..8).rev() {
+                    for rank in 0..8 {
+                        let piece = board.get(file, rank);
                         let btn = if let Some(source) = piece_image(&piece) {
                             egui::Button::image(source)
                         } else {
@@ -126,20 +126,20 @@ impl App {
                         };
                         let selected = self
                             .selected_cell
-                            .map(|fig| fig == (rank as usize, file as usize))
+                            .map(|fig| fig == (file as usize, rank as usize))
                             .unwrap_or(false);
                         let btn = ui.add(
                             btn.frame(false)
                                 .min_size(Vec2::new(self.cell_size, self.cell_size))
                                 .fill(background_color(
-                                    (rank as usize, file as usize),
+                                    (file as usize, rank as usize),
                                     selected,
                                     self.moves
                                         .as_ref()
                                         .and_then(|moves| {
                                             moves.iter().find(|_move| {
                                                 unpack_pos(_move.end_position())
-                                                    == (rank as u32, file as u32)
+                                                    == (file as u32, rank as u32)
                                             })
                                         })
                                         .is_some(),
@@ -147,7 +147,7 @@ impl App {
                                 )),
                         );
                         if btn.clicked() {
-                            println!("Position {}-{} was clicked", rank, file);
+                            println!("Position {}-{} was clicked", file, rank);
                             println!("Cell: {:?}", piece);
                             self.moves = if let Some(moves) = self.moves.as_mut() {
                                 match piece.type_() {
@@ -161,7 +161,7 @@ impl App {
                                             .iter()
                                             .find(|_move| {
                                                 unpack_pos(_move.end_position())
-                                                    == (rank as u32, file as u32)
+                                                    == (file as u32, rank as u32)
                                             })
                                             .cloned();
                                         self.chosen_figure = None;
@@ -182,7 +182,7 @@ impl App {
                                         // dbg!(&moves);
                                         self.chosen_figure = if !moves.is_empty() {
                                             self.selected_cell =
-                                                Some((rank as usize, file as usize));
+                                                Some((file as usize, rank as usize));
                                             Some(piece)
                                         } else {
                                             None

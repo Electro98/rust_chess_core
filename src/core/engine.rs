@@ -82,10 +82,10 @@ impl Move {
             MoveType::QuietMove(pos) => *pos,
             MoveType::Capture(piece) => piece.position() as u8,
             MoveType::Castling(side, _) => {
-                let rank = self.piece.position & 0xf0;
+                let file = self.piece.position & 0xf0;
                 match side {
-                    CastlingSide::KingSide => rank | 0x06,
-                    CastlingSide::QueenSide => rank | 0x02,
+                    CastlingSide::KingSide => file | 0x06,
+                    CastlingSide::QueenSide => file | 0x02,
                 }
             }
             MoveType::PromotionQuiet(pos, _) => *pos,
@@ -98,10 +98,10 @@ impl Move {
     fn castling_rook_position(&self) -> u8 {
         match &self.move_type {
             MoveType::Castling(side, _) => {
-                let rank = self.piece.position & 0xf0;
+                let file = self.piece.position & 0xf0;
                 match side {
-                    CastlingSide::KingSide => rank | 0x05,
-                    CastlingSide::QueenSide => rank | 0x03,
+                    CastlingSide::KingSide => file | 0x05,
+                    CastlingSide::QueenSide => file | 0x03,
                 }
             }
             _ => unreachable!("Error in code logic! Non-castling move asked for rook pos!"),
@@ -172,6 +172,13 @@ impl Board {
         }
     }
 
+    pub unsafe fn from_slice(slice: &[u8]) -> Board {
+        assert!(slice.len() >= 128, "Slice is too small for reading board from it!");
+        let mut board = Self::new();
+        board.arr.copy_from_slice(slice);
+        board
+    }
+
     #[cfg(debug_assertions)]
     pub fn new_debug(arr: &[u8; 64]) -> Board {
         let mut board = Self::new();
@@ -188,8 +195,8 @@ impl Board {
     }
 
     #[inline]
-    pub fn get(&self, rank: u8, file: u8) -> Piece {
-        let position = compact_pos(rank, file);
+    pub fn get(&self, file: u8, rank: u8) -> Piece {
+        let position = compact_pos(file, rank);
         Piece::from_code(self.arr[position as usize], position)
     }
 
@@ -288,15 +295,15 @@ impl Board {
                 }
                 self.arr[piece.position()] = 0x00;
                 self.arr[rook.position()] = 0x00;
-                let rank = piece.position & 0xf0;
+                let file = piece.position & 0xf0;
                 match castling_side {
                     CastlingSide::KingSide => {
-                        self.arr[(rank | 0x06) as usize] = piece.code | PieceFlag::Moved as u8;
-                        self.arr[(rank | 0x05) as usize] = rook.code | PieceFlag::Moved as u8;
+                        self.arr[(file | 0x06) as usize] = piece.code | PieceFlag::Moved as u8;
+                        self.arr[(file | 0x05) as usize] = rook.code | PieceFlag::Moved as u8;
                     }
                     CastlingSide::QueenSide => {
-                        self.arr[(rank | 0x02) as usize] = piece.code | PieceFlag::Moved as u8;
-                        self.arr[(rank | 0x03) as usize] = rook.code | PieceFlag::Moved as u8;
+                        self.arr[(file | 0x02) as usize] = piece.code | PieceFlag::Moved as u8;
+                        self.arr[(file | 0x03) as usize] = rook.code | PieceFlag::Moved as u8;
                     }
                 }
             }
@@ -350,15 +357,15 @@ impl Board {
                 self.arr[piece.position()] = piece.code;
             }
             Castling(castling_side, rook) => {
-                let rank = piece.position & 0xf0;
+                let file = piece.position & 0xf0;
                 match castling_side {
                     CastlingSide::KingSide => {
-                        self.arr[(rank | 0x06) as usize] = 0x00;
-                        self.arr[(rank | 0x05) as usize] = 0x00;
+                        self.arr[(file | 0x06) as usize] = 0x00;
+                        self.arr[(file | 0x05) as usize] = 0x00;
                     }
                     CastlingSide::QueenSide => {
-                        self.arr[(rank | 0x02) as usize] = 0x00;
-                        self.arr[(rank | 0x03) as usize] = 0x00;
+                        self.arr[(file | 0x02) as usize] = 0x00;
+                        self.arr[(file | 0x03) as usize] = 0x00;
                     }
                 }
                 self.arr[piece.position()] = piece.code;
@@ -443,15 +450,15 @@ impl Board {
         for _ in 0..8u8 {
             mask.push(vec![false; 8]);
         }
-        for file in 0..8u8 {
-            for rank in 0..8u8 {
-                let pos = rank << 4 | file;
+        for rank in 0..8u8 {
+            for file in 0..8u8 {
+                let pos = file << 4 | rank;
                 let piece = Piece::from_code(self.arr[pos as usize], pos);
                 if piece.code == 0x00 || piece.color() != player {
                     continue;
                 }
-                let (rank, file): (usize, usize) = unpack_pos(pos);
-                mask[file][rank] = true;
+                let (file, rank): (usize, usize) = unpack_pos(pos);
+                mask[rank][file] = true;
                 match piece.type_() {
                     PieceType::EmptySquare => unreachable!(),
                     PieceType::Invalid => unreachable!(),
@@ -471,16 +478,16 @@ impl Board {
                             if !is_valid_coord(pos) {
                                 continue;
                             }
-                            let (rank, file): (usize, usize) = unpack_pos(pos);
-                            mask[file][rank] = true;
+                            let (file, rank): (usize, usize) = unpack_pos(pos);
+                            mask[rank][file] = true;
                         }
                         let cell = self.arr[front_pos as usize];
-                        let (rank, file): (usize, usize) = unpack_pos(front_pos);
-                        mask[file][rank] = true;
+                        let (file, rank): (usize, usize) = unpack_pos(front_pos);
+                        mask[rank][file] = true;
                         if cell == 0x00 {
                             let pos = front_pos.wrapping_add(step);
-                            let (rank, file): (usize, usize) = unpack_pos(pos);
-                            mask[file][rank] = true;
+                            let (file, rank): (usize, usize) = unpack_pos(pos);
+                            mask[rank][file] = true;
                         }
                     }
                     PieceType::Knight => {
@@ -489,8 +496,8 @@ impl Board {
                             if !is_valid_coord(pos) {
                                 continue;
                             }
-                            let (rank, file): (usize, usize) = unpack_pos(pos);
-                            mask[file][rank] = true;
+                            let (file, rank): (usize, usize) = unpack_pos(pos);
+                            mask[rank][file] = true;
                         }
                     }
                     PieceType::King => {
@@ -499,8 +506,8 @@ impl Board {
                             if !is_valid_coord(pos) {
                                 continue;
                             }
-                            let (rank, file): (usize, usize) = unpack_pos(pos);
-                            mask[file][rank] = true;
+                            let (file, rank): (usize, usize) = unpack_pos(pos);
+                            mask[rank][file] = true;
                         }
                     }
                     // Sliding pieces
@@ -514,8 +521,8 @@ impl Board {
                         for dir in possible_directions {
                             let mut pos = pos.wrapping_add(*dir);
                             while is_valid_coord(pos) {
-                                let (rank, file): (usize, usize) = unpack_pos(pos);
-                                mask[file][rank] = true;
+                                let (file, rank): (usize, usize) = unpack_pos(pos);
+                                mask[rank][file] = true;
                                 let cell = self.arr[pos as usize];
                                 if cell != 0x00 {
                                     break;
@@ -629,10 +636,10 @@ impl Board {
     pub fn obstruct(self, player: Color) -> Self {
         let mask = self.obstruct_board(player);
         let mut obstructed_board = self;
-        for rank in 0..8u8 {
-            for file in 0..8u8 {
-                let pos = rank << 4 | file;
-                if mask[file as usize][rank as usize] {
+        for file in 0..8u8 {
+            for rank in 0..8u8 {
+                let pos = file << 4 | rank;
+                if mask[rank as usize][file as usize] {
                     obstructed_board.arr[pos as usize] = 0x00;
                 }
             }
@@ -654,14 +661,14 @@ impl Board {
 
     pub fn compress(&self) -> CompressedBoard {
         let mut compressed_board = [0; 8];
-        for rank in 0..8u8 {
+        for file in 0..8u8 {
             let mut col: u32 = 0;
-            for file in 0..8u8 {
-                let pos = compact_pos(rank, file) as usize;
+            for rank in 0..8u8 {
+                let pos = compact_pos(file, rank) as usize;
                 let cell = self.arr[pos] & 0x80 >> 4 | self.arr[pos] & 0x05;
-                col |= (cell as u32) << (file * 4);
+                col |= (cell as u32) << (rank * 4);
             }
-            compressed_board[rank as usize] = col;
+            compressed_board[file as usize] = col;
         }
         compressed_board
     }
@@ -687,15 +694,15 @@ impl Default for Board {
 
 const ITER_INDEX: [usize; 64] = {
     let mut arr = [0; 64];
-    let mut file = 0;
     let mut rank = 0;
-    while file < 8 {
-        arr[rank * 8 + file] = rank << 4 | file;
-        if rank < 7 {
-            rank += 1;
-        } else {
-            rank = 0;
+    let mut file = 0;
+    while rank < 8 {
+        arr[file * 8 + rank] = file << 4 | rank;
+        if file < 7 {
             file += 1;
+        } else {
+            file = 0;
+            rank += 1;
         }
     }
     arr
@@ -802,32 +809,32 @@ pub struct Game {
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum GameEndState {
-    CheckMate,
+    CheckMate(Color),
+    Resignation(Color),
     DrawStalemate,
     DrawThreefoldRepetition,
     DrawFiftyMoveRule,
     DrawInsufficientMaterial,
-    Resignation(Color),
 }
 
 fn flag_piece_moved(piece: PieceType, color: Color, pos: u8) -> u8 {
-    let (rank, file): (u8, u8) = unpack_pos(pos);
-    let right_file = match piece {
+    let (file, rank): (u8, u8) = unpack_pos(pos);
+    let right_rank = match piece {
         PieceType::Pawn => true,
-        PieceType::Rook => file == 0x0 || file == 0x7,
-        PieceType::Knight => file == 0x1 || file == 0x6,
-        PieceType::Bishop => file == 0x2 || file == 0x5,
-        PieceType::Queen => file == 0x3,
-        PieceType::King => file == 0x4,
+        PieceType::Rook => rank == 0x0 || rank == 0x7,
+        PieceType::Knight => rank == 0x1 || rank == 0x6,
+        PieceType::Bishop => rank == 0x2 || rank == 0x5,
+        PieceType::Queen => rank == 0x3,
+        PieceType::King => rank == 0x4,
         PieceType::EmptySquare => true,
         PieceType::Invalid => unreachable!("Created an invalid piece?"),
     };
     let is_pawn = matches!(piece, PieceType::Pawn);
-    let right_rank = match color {
-        Color::Black => (is_pawn && rank == 0x06) || (!is_pawn && rank == 0x07),
-        Color::White => (is_pawn && rank == 0x01) || (!is_pawn && rank == 0x00),
+    let right_file = match color {
+        Color::Black => (is_pawn && file == 0x06) || (!is_pawn && file == 0x07),
+        Color::White => (is_pawn && file == 0x01) || (!is_pawn && file == 0x00),
     };
-    if right_file && right_rank {
+    if right_rank && right_file {
         0
     } else {
         PieceFlag::Moved as u8
@@ -852,14 +859,14 @@ impl Game {
         let mut chars = fen.chars();
         let mut board = Board::new();
         // Board portion
-        for rank in (0..8).rev() {
-            let mut file = 0;
+        for file in (0..8).rev() {
+            let mut rank = 0;
             while let Some(letter) = chars.next() {
                 if let Some(num) = letter.to_digit(10) {
-                    file += num;
+                    rank += num;
                     continue;
                 }
-                if file == 8 {
+                if rank == 8 {
                     break;
                 }
                 let color: Color = if letter.is_uppercase() {
@@ -883,10 +890,10 @@ impl Game {
                         ))
                     }
                 };
-                let pos = compact_pos(rank as u8, file as u8);
+                let pos = compact_pos(file as u8, rank as u8);
                 board.arr[pos as usize] =
                     piece as u8 | color as u8 | flag_piece_moved(piece, color, pos);
-                file += 1;
+                rank += 1;
             }
         }
         // Active player
@@ -939,15 +946,15 @@ impl Game {
         let mut last_move = match chars.next() {
             Some('-') => None,
             Some(letter) => {
-                let file = match letter.to_ascii_lowercase() {
+                let rank = match letter.to_ascii_lowercase() {
                     'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g' | 'h' => letter as u8 - 'a' as u8,
-                    _ => return Err("Error in move file".to_string()),
+                    _ => return Err("Error in move rank".to_string()),
                 };
-                let mut rank = chars.next().unwrap() as u8 - '0' as u8;
+                let mut file = chars.next().unwrap() as u8 - '0' as u8;
                 if current_player == Color::White {
-                    rank -= 2;
+                    file -= 2;
                 }
-                let pos = compact_pos(rank, file);
+                let pos = compact_pos(file, rank);
                 let piece = Piece::from_code(board.arr[pos as usize], pos);
                 if piece.type_() == PieceType::Pawn {
                     Some(Move {
@@ -1463,7 +1470,7 @@ impl Game {
         if self.get_possible_moves(false).is_empty() {
             match _move.check {
                 CheckType::None => Some(GameEndState::DrawStalemate),
-                _ => Some(GameEndState::CheckMate),
+                _ => Some(GameEndState::CheckMate(self.current_player.opposite())),
             }
         } else {
             None
@@ -1677,9 +1684,9 @@ impl Piece {
                 distance(self.position, target) == 3 && diff != 0 && diff != 3
             }
             PieceType::King => {
-                let rank_diff = (self.position & 0xf0).abs_diff(target & 0xf0) >> 4;
-                let file_diff = (self.position & 0x0f).abs_diff(target & 0x0f);
-                (0 == rank_diff || rank_diff == 1) && (0 == file_diff || 1 == file_diff)
+                let file_diff = (self.position & 0xf0).abs_diff(target & 0xf0) >> 4;
+                let rank_diff = (self.position & 0x0f).abs_diff(target & 0x0f);
+                (0 == file_diff || file_diff == 1) && (0 == rank_diff || 1 == rank_diff)
             }
             PieceType::Invalid => panic!("Invalid square is trying to attack?!"),
             PieceType::EmptySquare => panic!("Empty square is trying to attack?!"),
@@ -1760,7 +1767,7 @@ impl PieceType {
         unsafe { std::mem::transmute(byte & 0x07) }
     }
 
-    fn is_valid(&self) -> bool {
+    pub fn is_valid(&self) -> bool {
         matches!(
             self,
             Self::Pawn | Self::Knight | Self::Bishop | Self::Rook | Self::Queen | Self::King

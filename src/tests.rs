@@ -19,9 +19,9 @@ fn test_iters() {
     let board = Board::default();
     let mut iter = board.iter();
     let mut iter_pieces = board.iter_pieces();
-    for rank in 0..8u8 {
-        for file in 0..8u8 {
-            let pos = rank << 4 | file;
+    for file in 0..8u8 {
+        for rank in 0..8u8 {
+            let pos = file << 4 | rank;
             let code = board.inside()[pos as usize];
             let piece = Piece::from_code(code, pos);
             let iter_code = iter.next();
@@ -51,9 +51,9 @@ fn math() {
 fn straight_line() {
     const STRAIGHT_LINE: [u8; 9] = [0x02, 0x12, 0x20, 0x21, 0x22, 0x23, 0x24, 0x32, 0x42];
     let test_piece = 0x22;
-    for rank in 0..5 {
-        for file in 0..5 {
-            let pos = compact_pos(rank, file);
+    for file in 0..5 {
+        for rank in 0..5 {
+            let pos = compact_pos(file, rank);
             println!("Current position: 0x{pos:x}");
             assert!(STRAIGHT_LINE.contains(&pos) == is_in_straight_line(test_piece, pos));
             assert!(STRAIGHT_LINE.contains(&pos) == is_in_straight_line(pos, test_piece));
@@ -65,9 +65,9 @@ fn straight_line() {
 fn diagonal_line() {
     const DIAGONAL_LINE: [u8; 9] = [0x00, 0x04, 0x11, 0x13, 0x22, 0x31, 0x33, 0x40, 0x44];
     let test_piece = 0x22;
-    for rank in 0..5 {
-        for file in 0..5 {
-            let pos = compact_pos(rank, file);
+    for file in 0..5 {
+        for rank in 0..5 {
+            let pos = compact_pos(file, rank);
             println!("Current position: 0x{pos:x}");
             assert!(DIAGONAL_LINE.contains(&pos) == is_in_diagonal_line(test_piece, pos));
             assert!(DIAGONAL_LINE.contains(&pos) == is_in_diagonal_line(pos, test_piece));
@@ -78,12 +78,12 @@ fn diagonal_line() {
 fn player_board(board: &Board, player: Color) -> Vec<Vec<Cell>> {
     let mask = board.obstruct_board(player);
     let mut vec_board = Vec::with_capacity(8);
-    for rank in 0..8u8 {
+    for file in 0..8u8 {
         let mut row = Vec::with_capacity(8);
-        for file in 0..8u8 {
-            let pos = (rank << 4) + file;
+        for rank in 0..8u8 {
+            let pos = (file << 4) + rank;
             let piece = Piece::from_code(board.inside()[pos as usize], pos);
-            row.push(if !mask[file as usize][rank as usize] {
+            row.push(if !mask[rank as usize][file as usize] {
                 Cell::Unknown
             } else if piece.type_() == PieceType::EmptySquare {
                 Cell::Empty
