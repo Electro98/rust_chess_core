@@ -4,7 +4,7 @@ use std::{
     thread::JoinHandle,
 };
 
-use chess_engine::{
+use chess_core::{
     core::{
         definitions::ImplicitMove,
         engine::{Game, GameEndState, Move, Piece},
