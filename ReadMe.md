@@ -1,15 +1,15 @@
 # Silly Chess Engine
 
-That's just chess engine for my "Dark Chess" game as my student diploma project.
+That's just chess engine for my "Dark Chess" mobile game that started as my student diploma project.
 
-It may be silly or/and goofy, but tremendous amount of work and passion were put into it!
+It's still under construction, but the end of planned functionality is quite near.
 
 
 ## Current state of project
 
-It's under non-active development in my free time. Most features are finished but some of them cut because of rework and will be rewritten! This's unfortunately takes time as well.
+It's under non-active development in my free time. Some of the features are finished but some of them cut because of rework and will be rewritten! This's unfortunately takes time as well.
 
-But I still happy that now it's bugs free (at least from chess standpoint) and kinda playable!
+But I'm quite happy that now it's bugs free (at least from chess standpoint) and kinda playable! Still a long way to go to be polished and done! (^_^)
 
 ## Usage
 
@@ -30,26 +30,28 @@ RUST_LOG=client=debug cargo run --features="build-binary" --bin client -- "ws://
 
 ```
 
-## TODO:
- - [X] Create basic declarations for all game elements
-   - [X] Chess board
-   - [X] Chess piece
-   - [X] Move
-   - [X] History of moves
- - [X] Write logic for:
-   - [X] Making a move
-   - [X] Undo a move
-   - [X] List all possible moves
-   - [X] Allowing Checks and Mate
-   - [X] Castling right check
- - [X] Make basic interface?
-   - [X] Display board
-   - [X] Make moves colorful
-   - [X] Display checks and mates
- - [X] Tests for chess
- - [ ] Create kotling bindings (ABANDONED)
-   - [ ] Compile it
-   - [ ] Make it works
+## Todo: Project Roadmap
+ - [ ] Internals rework
+   - [ ] Unused code cleanup
+   - [ ] Exploring bottlenecks of current code
+   - [ ] Trying different speedups and seeing how they affect different platforms
+   - [ ] Try to find different approach to determining legality of moves
+ - [ ] Making standalone apps playable
+   - [ ] Finishing base egui app
+   - [ ] Creating bot opponent
+   - [ ] Something ?
+ - [ ] Multiplayer
+   - [ ] Deciding on protocol* architecture
+   - [ ] Implementing strict server rules
+   - [ ] Make it version dependent (?)
+ - [ ] Tests
+   - [ ] Review current tests
+   - [ ] Create new ones for current undefined behaviors
+ - [ ] Project structure
+   - [ ] Separate unused parts from main engine
+   - [ ] Hide network functionality by feature flags
+   - [ ] Make basic client as separate package (?)
+ - [X] Create kotling bindings (Moved out current repository)
 
 
 ## Thanks!
