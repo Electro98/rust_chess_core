@@ -809,12 +809,12 @@ pub struct Game {
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum GameEndState {
-    CheckMate,
+    CheckMate(Color),
+    Resignation(Color),
     DrawStalemate,
     DrawThreefoldRepetition,
     DrawFiftyMoveRule,
     DrawInsufficientMaterial,
-    Resignation(Color),
 }
 
 fn flag_piece_moved(piece: PieceType, color: Color, pos: u8) -> u8 {
@@ -1470,7 +1470,7 @@ impl Game {
         if self.get_possible_moves(false).is_empty() {
             match _move.check {
                 CheckType::None => Some(GameEndState::DrawStalemate),
-                _ => Some(GameEndState::CheckMate),
+                _ => Some(GameEndState::CheckMate(self.current_player.opposite())),
             }
         } else {
             None
