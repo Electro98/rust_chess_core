@@ -1,25 +1,58 @@
 use std::sync::{
-    mpsc::{Receiver, Sender},
     Arc,
+    mpsc::{Receiver, Sender},
 };
 
-use futures::{future, SinkExt, StreamExt};
+use futures::{SinkExt, StreamExt, future};
 use log::{error, info};
+use postcard::{from_bytes, to_allocvec};
 use tokio::sync::{
-    mpsc::{self, UnboundedReceiver, UnboundedSender},
     Mutex,
+    mpsc::{self, UnboundedReceiver, UnboundedSender},
 };
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use url::Url;
 
-use crate::{
-    core::engine::{Game, Move},
+use chess_core::{
     Color,
+    core::engine::{Game, Move},
+    online_game::definitions::ParsingMessageError,
 };
 
-use crate::online_game::definitions::{ClientMessage, ServerMessage};
+use chess_core::online_game::definitions::{ClientMessage, GameId, ServerMessage};
 
-use super::definitions::GameId;
+struct ClientMessageWrapper(ClientMessage);
+struct ServerMessageWrapper(ServerMessage);
+
+trait Wrapped<T> {
+    fn wrap(self) -> T;
+}
+
+impl Wrapped<ClientMessageWrapper> for ClientMessage {
+    fn wrap(self) -> ClientMessageWrapper {
+        ClientMessageWrapper(self)
+    }
+}
+
+impl From<ClientMessageWrapper> for tungstenite::Message {
+    fn from(value: ClientMessageWrapper) -> Self {
+        Self::binary(to_allocvec(&value.0).unwrap())
+    }
+}
+
+impl TryFrom<tungstenite::Message> for ServerMessageWrapper {
+    type Error = ParsingMessageError;
+    fn try_from(value: tungstenite::Message) -> Result<Self, Self::Error> {
+        if value.is_binary() {
+            match from_bytes(&value.into_data()) {
+                Ok(result) => Ok(ServerMessageWrapper(result)),
+                Err(err) => Err(ParsingMessageError::PostcardError(err)),
+            }
+        } else {
+            Err(ParsingMessageError::NonBinaryError)
+        }
+    }
+}
 
 #[derive(Default, Clone, Copy, Debug)]
 pub enum ClientState {
@@ -265,7 +298,7 @@ impl OnlineClient {
         let (mut write, read) = websocket.split();
         let input = UnboundedReceiverStream::new(input_rx);
 
-        let _ = write.send(ClientMessage::Connected.into()).await;
+        let _ = write.send(ClientMessage::Connected.wrap().into()).await;
         let data_cp = data.clone();
         let output_tx_cp = output_tx.clone();
         let client_handling = tokio::spawn(
@@ -279,7 +312,7 @@ impl OnlineClient {
                                 if let Some(output) = output {
                                     let _ = output_tx.send(output);
                                 }
-                                client_msg.map(|msg| Ok(msg.into()))
+                                client_msg.map(|msg| Ok(msg.wrap().into()))
                             }
                             Err(err) => {
                                 error!("Client provided incorrect input! Err: {:?}", err);
@@ -293,7 +326,7 @@ impl OnlineClient {
         );
 
         let server_handling = read.for_each(|msg| async {
-            let server_message = match msg {
+            let server_message: Result<ServerMessageWrapper, _> = match msg {
                 Ok(msg) => msg,
                 Err(err) => {
                     info!("Something went wrong with connection! Err: {}", err);
@@ -304,7 +337,7 @@ impl OnlineClient {
             }
             .try_into();
             if let Ok(server_message) = server_message {
-                match handle_server_message(&data, server_message).await {
+                match handle_server_message(&data, server_message.0).await {
                     Ok(output) => {
                         if let Some(output) = output {
                             let _ = output_tx.send(output);

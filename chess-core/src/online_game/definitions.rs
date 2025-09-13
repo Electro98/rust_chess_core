@@ -75,30 +75,11 @@ impl From<ServerMessage> for warp::ws::Message {
         Self::binary(to_allocvec(&value).unwrap())
     }
 }
-impl From<ClientMessage> for tungstenite::Message {
-    fn from(value: ClientMessage) -> Self {
-        Self::binary(to_allocvec(&value).unwrap())
-    }
-}
 
 #[derive(Debug)]
 pub enum ParsingMessageError {
     NonBinaryError,
     PostcardError(postcard::Error),
-}
-
-impl TryFrom<tungstenite::Message> for ServerMessage {
-    type Error = ParsingMessageError;
-    fn try_from(value: tungstenite::Message) -> Result<Self, Self::Error> {
-        if value.is_binary() {
-            match from_bytes(&value.into_data()) {
-                Ok(result) => Ok(result),
-                Err(err) => Err(ParsingMessageError::PostcardError(err)),
-            }
-        } else {
-            Err(ParsingMessageError::NonBinaryError)
-        }
-    }
 }
 
 impl TryFrom<warp::ws::Message> for ClientMessage {

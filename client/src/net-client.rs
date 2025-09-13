@@ -1,28 +1,22 @@
-use std::{
-    str::FromStr,
-    sync::mpsc::{Receiver, Sender},
-    thread::JoinHandle,
-};
+use std::str::FromStr;
 
 use chess_core::{
+    Color, PieceType,
     core::{
         definitions::ImplicitMove,
         engine::{Game, GameEndState, Move, Piece},
         utils::unpack_pos,
     },
-    online_game::client::{ClientState, OnlineClient, OnlineClientOutput},
-    Color, PieceType,
 };
 use eframe::egui::{self, Vec2};
-use futures::StreamExt;
-use gui::{background_color, piece_image};
 use log::{debug, error, info};
-use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
-use tokio_stream::wrappers::UnboundedReceiverStream;
-use tungstenite::{Error, Message};
 use url::Url;
 
 mod gui;
+mod online;
+
+use gui::{background_color, piece_image};
+use online::{ClientState, OnlineClient, OnlineClientOutput};
 
 struct App {
     client: OnlineClient,
@@ -252,11 +246,7 @@ impl App {
                                         } else {
                                             None
                                         };
-                                        if moves.is_empty() {
-                                            None
-                                        } else {
-                                            Some(moves)
-                                        }
+                                        if moves.is_empty() { None } else { Some(moves) }
                                     }
                                 }
                             };

@@ -173,7 +173,10 @@ impl Board {
     }
 
     pub unsafe fn from_slice(slice: &[u8]) -> Board {
-        assert!(slice.len() >= 128, "Slice is too small for reading board from it!");
+        assert!(
+            slice.len() >= 128,
+            "Slice is too small for reading board from it!"
+        );
         let mut board = Self::new();
         board.arr.copy_from_slice(slice);
         board
