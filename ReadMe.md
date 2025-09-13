@@ -49,8 +49,9 @@ RUST_LOG=client=debug cargo run --features="build-binary" --bin client -- "ws://
    - [ ] Create new ones for current undefined behaviors
  - [ ] Project structure
    - [ ] Separate unused parts from main engine
-   - [ ] Hide network functionality by feature flags
-   - [ ] Make basic client as separate package (?)
+   - [ ] Serialization functionality should be by hidden by feature
+   - [X] Hide network functionality by feature flags
+   - [X] Make basic client as separate package (?)
  - [X] Create kotling bindings (Moved out current repository)
 
 
