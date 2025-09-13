@@ -1,6 +1,6 @@
 use std::env;
 
-use chess_engine::utils::perf_test;
+use chess_core::utils::perf_test;
 
 fn main() -> Result<(), ()> {
     let args: Vec<String> = env::args().collect();

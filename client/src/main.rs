@@ -1,10 +1,10 @@
-use chess_engine::{
+use chess_core::{
+    Color, PieceType,
     core::{
         definitions::ImplicitMove,
         engine::{Game, GameEndState, Move, Piece},
         utils::unpack_pos,
     },
-    Color, PieceType,
 };
 use eframe::{egui, epaint::Vec2};
 use gui::{background_color, piece_image};
@@ -187,11 +187,7 @@ impl App {
                                         } else {
                                             None
                                         };
-                                        if moves.is_empty() {
-                                            None
-                                        } else {
-                                            Some(moves)
-                                        }
+                                        if moves.is_empty() { None } else { Some(moves) }
                                     }
                                 }
                             };

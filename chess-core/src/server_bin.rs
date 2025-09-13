@@ -1,4 +1,4 @@
-use chess_engine::online_game::{
+use chess_core::online_game::{
     definitions::Rooms,
     handlers::{existing_room_handler, new_room_handler},
 };

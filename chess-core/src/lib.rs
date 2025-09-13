@@ -1,5 +1,6 @@
 pub mod core;
 // pub mod online_game;
+#[cfg(feature = "network")]
 pub mod online_game;
 pub mod utils;
 
