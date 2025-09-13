@@ -440,12 +440,11 @@ impl Board {
 
     fn is_attacked(&self, position: u8, by_color: Color) -> bool {
         self.iter_pieces()
-            .find(|piece| {
+            .any(|piece| {
                 piece.color() == by_color
                     && piece.type_().is_valid()
                     && piece.can_attack(position, self.arr)
             })
-            .is_some()
     }
 
     pub fn obstruct_board(&self, player: Color) -> Vec<Vec<bool>> {
@@ -864,7 +863,7 @@ impl Game {
         // Board portion
         for file in (0..8).rev() {
             let mut rank = 0;
-            while let Some(letter) = chars.next() {
+            for letter in chars.by_ref() {
                 if let Some(num) = letter.to_digit(10) {
                     rank += num;
                     continue;
@@ -926,7 +925,7 @@ impl Game {
             board.arr[king.position()] = king.code | rights;
             Ok(())
         };
-        while let Some(letter) = chars.next() {
+        for letter in chars.by_ref() {
             if letter.is_lowercase() && rights_color == Color::White {
                 update_king(&mut board, rights_color, rights)?;
                 rights = 0;
@@ -950,10 +949,10 @@ impl Game {
             Some('-') => None,
             Some(letter) => {
                 let rank = match letter.to_ascii_lowercase() {
-                    'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g' | 'h' => letter as u8 - 'a' as u8,
+                    'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g' | 'h' => letter as u8 - b'a',
                     _ => return Err("Error in move rank".to_string()),
                 };
-                let mut file = chars.next().unwrap() as u8 - '0' as u8;
+                let mut file = chars.next().unwrap() as u8 - b'0';
                 if current_player == Color::White {
                     file -= 2;
                 }
@@ -987,7 +986,7 @@ impl Game {
             0 => None,
             1 if last_move
                 .as_ref()
-                .map_or(false, |_move| _move.end_position() == attackers[0].position) =>
+                .is_some_and(|_move| _move.end_position() == attackers[0].position) =>
             {
                 Some(CheckType::Direct)
             }
@@ -1082,7 +1081,7 @@ impl Game {
                     if in_front == 0x00
                         && possible_positions
                             .as_ref()
-                            .map_or(true, |positions| positions.contains(&front_pos))
+                            .is_none_or(|positions| positions.contains(&front_pos))
                     {
                         possible_moves.push({
                             Move {
@@ -1105,7 +1104,7 @@ impl Game {
                         let cell = self.board.arr[pos as usize];
                         if cell != 0x00
                             && Color::from_byte(cell) != self.current_player
-                            && attacker.map_or(true, |attacker| attacker.position == pos)
+                            && attacker.is_none_or(|attacker| attacker.position == pos)
                         {
                             possible_moves.push({
                                 let target = Piece::from_code(cell, pos);
@@ -1127,7 +1126,7 @@ impl Game {
                         if self.board.arr[pos as usize] == 0x00
                             && possible_positions
                                 .as_ref()
-                                .map_or(true, |positions| positions.contains(&pos))
+                                .is_none_or(|positions| positions.contains(&pos))
                         {
                             possible_moves.push(Move {
                                 piece,
@@ -1139,7 +1138,7 @@ impl Game {
                     // enpassant
                     if let Some(pawn_pos) = &enpassant_pawn {
                         if pawn_pos.abs_diff(piece.position) != 0x01
-                            || attacker.map_or(false, |attacker| attacker.position != *pawn_pos)
+                            || attacker.is_some_and(|attacker| attacker.position != *pawn_pos)
                         {
                             continue;
                         }
@@ -1231,7 +1230,7 @@ impl Game {
                         }
                     }
                     if PieceFlag::Moved.is_set(piece.code)
-                        || king_in_check.map_or(false, |check| !matches!(check, CheckType::None))
+                        || king_in_check.is_some_and(|check| !matches!(check, CheckType::None))
                     {
                         continue;
                     }
@@ -1284,7 +1283,7 @@ impl Game {
                             if cell == 0x00
                                 && possible_positions
                                     .as_ref()
-                                    .map_or(true, |positions| positions.contains(&pos))
+                                    .is_none_or(|positions| positions.contains(&pos))
                             {
                                 possible_moves.push(Move {
                                     piece,
@@ -1292,7 +1291,7 @@ impl Game {
                                     check: CheckType::None,
                                 });
                             } else if Color::from_byte(cell) != self.current_player
-                                && attacker.map_or(true, |attacker| attacker.position == pos)
+                                && attacker.is_none_or(|attacker| attacker.position == pos)
                             {
                                 possible_moves.push(Move {
                                     piece,
@@ -1329,22 +1328,20 @@ impl Game {
             } else {
                 Vec::new()
             };
-            possible_moves = possible_moves
-                .into_iter()
-                .filter(|_move| match _move.move_type() {
+            possible_moves
+                .retain(|_move| match _move.move_type() {
                     _ if _move.piece().type_() == PieceType::King => true,
                     MoveType::EnPassantCapture(pawn, _) if pawn == &attacker => true,
                     _ => {
                         _move.end_position() == attacker.position
                             || possible_positions.contains(&_move.end_position())
                     }
-                })
-                .collect();
+                });
         }
         if bot {
             for idx in 0..possible_moves.len() {
                 let piece = possible_moves[idx].piece;
-                possible_moves[idx].move_type = match possible_moves[idx].move_type.clone() {
+                possible_moves[idx].move_type = match possible_moves[idx].move_type {
                     MoveType::PromotionQuiet(pos, _) => {
                         for _type in [PieceType::Knight, PieceType::Rook, PieceType::Bishop] {
                             possible_moves.push(Move {
@@ -1398,10 +1395,9 @@ impl Game {
                 let discovered_check = pinned_pieces
                     .iter()
                     .find(|(piece, _)| piece == _move.piece())
-                    .map_or(false, |(_, attacker)| {
-                        between(enemy_king.position, attacker.position)
-                            .find(|pos| *pos == _move.end_position())
-                            .is_none()
+                    .is_some_and(|(_, attacker)| {
+                        !between(enemy_king.position, attacker.position)
+                            .any(|pos| pos == _move.end_position())
                     });
                 _move.check = CheckType::from_bools(direct_check, discovered_check);
             }
@@ -1484,7 +1480,7 @@ impl Game {
         let last_move = self
             .history
             .last_move()
-            .ok_or_else(|| "There's no move to undo.")?;
+            .ok_or("There's no move to undo.")?;
         self.existed_positions.undo_move(*last_move.move_type());
         self.board.undo(last_move);
         self.history.unrecord();
@@ -1511,7 +1507,7 @@ impl Game {
                 0 => unreachable!("This is just bug!"),
                 1 => {
                     let attacker = attackers[0];
-                    if self.history.last_move().map_or(false, |last_move| {
+                    if self.history.last_move().is_some_and(|last_move| {
                         let last_piece = match last_move.move_type() {
                             MoveType::PromotionCapture(_, new_type)
                             | MoveType::PromotionQuiet(_, new_type) => Piece::from_code(
@@ -1567,21 +1563,22 @@ impl Game {
 
 /** Bits structure of piece code
  * Bit 7 -- Color of the piece
- * - 0 -- Black
- * - 1 -- White
+ *  - 0 -- Black
+ *  - 1 -- White
+
  * Bit 6 -- Unknown flag
  * Bit 5 -- Castle flag for Kings only - QueenSide
  * Bit 4 -- Castle flag for Kings only - KingSide
  * Bit 3 -- Piece has moved flag
  * Bits 2-0 Piece type
- * - 1 -- Pawn
- * - 2 -- Knight
- * - 3 -- Bishop
- * - 4 -- Rook
- * - 5 -- Queen
- * - 6 -- King
- * - 7 -- Not used
- * - 0 -- Empty Square */
+ *  - 1 -- Pawn
+ *  - 2 -- Knight
+ *  - 3 -- Bishop
+ *  - 4 -- Rook
+ *  - 5 -- Queen
+ *  - 6 -- King
+ *  - 7 -- Not used
+ *  - 0 -- Empty Square */
 #[derive(Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Piece {
     code: u8,
