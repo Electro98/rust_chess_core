@@ -1,11 +1,4 @@
-use chess_core::{
-    Color, PieceType,
-    core::{
-        definitions::ImplicitMove,
-        engine::{Game, GameEndState, Move, Piece},
-        utils::unpack_pos,
-    },
-};
+use chess_core::core::{Color, Game, GameEndState, Move, Piece, PieceType, utils::unpack_pos};
 use eframe::{egui, epaint::Vec2};
 use gui::{background_color, piece_image};
 

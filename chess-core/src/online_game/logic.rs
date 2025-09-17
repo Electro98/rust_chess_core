@@ -1,4 +1,4 @@
-use crate::{core::engine::Game, Color};
+use crate::{core::Game, Color};
 use futures::{FutureExt, StreamExt};
 use tokio::sync::mpsc::{self, UnboundedReceiver};
 use tokio_stream::wrappers::UnboundedReceiverStream;

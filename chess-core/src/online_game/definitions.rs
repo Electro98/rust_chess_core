@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::{
-    core::engine::{Board, Game, GameEndState, Move},
+    core::{Board, Game, GameEndState, Move},
     Color,
 };
 use postcard::{from_bytes, to_allocvec};

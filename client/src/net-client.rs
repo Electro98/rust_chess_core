@@ -2,11 +2,7 @@ use std::str::FromStr;
 
 use chess_core::{
     Color, PieceType,
-    core::{
-        definitions::ImplicitMove,
-        engine::{Game, GameEndState, Move, Piece},
-        utils::unpack_pos,
-    },
+    core::{Game, GameEndState, Move, Piece, utils::unpack_pos},
 };
 use eframe::egui::{self, Vec2};
 use log::{debug, error, info};

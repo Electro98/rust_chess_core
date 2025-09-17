@@ -5,7 +5,7 @@ pub mod online_game;
 pub mod utils;
 
 // module re-exports
-pub use core::engine::{Color, PieceType};
+pub use core::{Color, PieceType};
 
 #[cfg(test)]
 mod tests;

@@ -1,8 +1,7 @@
 use crate::core::definitions::{Cell, Figure};
 
-use self::core::engine::{Board, Game, GameEndState, Piece};
-use self::core::game::ui_board;
 use self::core::utils::{between, compact_pos, is_in_diagonal_line, is_in_straight_line};
+use self::core::{ui_board, Board, Game, GameEndState, Piece};
 use self::utils::perf_test;
 use rand::seq::IteratorRandom;
 

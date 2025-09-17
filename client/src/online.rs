@@ -14,8 +14,7 @@ use tokio_stream::wrappers::UnboundedReceiverStream;
 use url::Url;
 
 use chess_core::{
-    Color,
-    core::engine::{Game, Move},
+    core::{Color, Game, Move},
     online_game::definitions::ParsingMessageError,
 };
 

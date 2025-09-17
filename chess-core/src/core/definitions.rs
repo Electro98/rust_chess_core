@@ -1,5 +1,6 @@
 use crate::core::engine::{Color, PieceType};
 
+// TODO: Delete!
 #[derive(Clone, Debug, PartialEq)]
 pub struct Figure {
     pub kind: PieceType,
@@ -14,9 +15,4 @@ pub enum Cell {
     Empty,
     Figure(Figure),
     Unknown,
-}
-
-pub trait ImplicitMove {
-    fn promotion(&self) -> bool;
-    fn set_promotion_type(&mut self, kind: PieceType);
 }
